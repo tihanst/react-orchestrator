@@ -1,5 +1,5 @@
 [project]
-name = "general-agent-orchestrator"
+name = "react-orchestrator"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -18,11 +18,11 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/general_agent_orchestrator"]
+packages = ["src/react_orchestrator"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-general-agent-orchestrator = "general_agent_orchestrator.main:main"
+react-orchestrator = "react_orchestrator.main:main"

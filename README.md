@@ -1,8 +1,13 @@
-# General Agent Orchestrator
+# ReAct Orchestrator
 
-A [LangGraph](https://github.com/langchain-ai/langgraph)-based agent harness built around a **ReAct loop with human-in-the-loop tool approval** and an **orchestrator-worker fan-out pattern** for parallel internet research. 
-The general form is easily adaptable to any tool-calling agent, with current tool selection dealing with local file content search, context discovery, writing, etc., while the orchestrator component operates a research agent over the web that is enabled to execute N concurrent searches, distill and synthesize results down, and compile them back to the orchestrator to consume. This can be adapted for any workflow orchestration need provided the tasks don't have temporal dependence (but it's possible to adapt the graph if they do). 
-The architecture is intentionally provider-agnostic: the LLM backend (currently [TogetherAI](https://www.together.ai/)) and web search client (currently [Tavily](https://tavily.com/)) are both thin integrations that can be swapped out with minor code changes.
+A [LangGraph](https://github.com/langchain-ai/langgraph)-based agent harness built around a **ReAct loop with human-in-the-loop tool approval** and a reusable **fan-out/fan-in orchestration pattern** for parallel sub-agent task execution.
+
+The repository currently implements a parallel internet research workflow, where an orchestrator delegates independent research tasks to concurrent worker agents before synthesizing and aggregating the results back to the orchestrating agent. The underlying orchestration layer is workflow-agnostic and can be extended with additional worker types and virtual tools while reusing the existing routing, approval, and aggregation mechanisms.
+
+The agent is equipped with a toolbox for file-system navigation, content and context discovery, and writing workflows, enabling it to explore local files and directories, gather supporting information, and produce artifacts as part of larger agent-driven tasks.
+
+The architecture is provider-agnostic: the LLM backend (currently TogetherAI) and web search client (currently Tavily) can be swapped with minimal code changes.
+
 
 ## Architecture
 
@@ -14,7 +19,7 @@ The graph has two distinct execution paths:
 The `assistant` node streams the LLM response. If the model emits a tool call, execution moves to `check_tool_permission`, which can interrupt and prompt the user for approval before proceeding. Rejected calls inject a `ToolMessage` denial back into the message history and return to `assistant`. Approved standard tool calls are handled by LangGraph's `ToolNode` and the result is fed back to `assistant`.
 
 **Research fan-out** — `check_tool_permission → research_agent_node(s) → compile_research → assistant`  
-When the model calls `parallel_internet_research_agent`, `check_tool_permission` detects the virtual tool and uses LangGraph `Send` to dispatch one `research_agent_node` per query in parallel. Each worker runs its own Tavily search and synthesizes the results with a dedicated LLM call. `compile_research` joins all branches, packages the results as a single `ToolMessage`, resets the intermediate research state, and hands control back to `assistant`.
+When the model calls `parallel_internet_research_agent`, `check_tool_permission` detects the virtual tool and uses LangGraph `Send` to dispatch one research sub-agent via `research_agent_node` per query in parallel. Each worker runs its own internet research and synthesizes the results with a dedicated LLM call. `compile_research` joins all branches, packages the results as a single `ToolMessage`, resets the intermediate research state, and hands control back to `assistant`.
 
 ### Nodes
 
@@ -32,7 +37,7 @@ When the model calls `parallel_internet_research_agent`, `check_tool_permission`
 
 | Tool | Description |
 |------|-------------|
-| `internet_research` | Single web search via Tavily; expects a full natural-language query |
+| `internet_research` | Single web search; expects a full natural-language query |
 | `parallel_internet_research_agent` | Virtual tool intercepted by the router to trigger the fan-out pattern across multiple independent queries |
 
 ### File navigation & context
@@ -59,7 +64,7 @@ When the model calls `parallel_internet_research_agent`, `check_tool_permission`
 
 Three log targets are written at runtime (paths configured in `.env`):
 
-- **`SEARCH_LOGS`** — JSONL of every Tavily request and response, tagged `single` or `multiple` depending on which tool triggered the search
+- **`SEARCH_LOGS`** — JSONL of every search request and response, tagged `single` or `multiple` depending on which tool triggered the search
 - **`AGENT_RESPONSE_LOGS`** — JSONL of full conversation message histories, written on clean exit
 - **`GENERAL_LOGS`** — Standard Python `logging` output for node-level debug/info events
 
@@ -89,7 +94,7 @@ LLM_MAX_TOKENS=8096
 # Web search (Tavily by default — swap in any search client)
 WEBSEARCH_API_KEY=your_tavily_key
 
-# Tool approval: set to 'y' to prompt before every tool call.
+# Tool approval: set to 'y' to prompt before every tool call, 'n' for automatically # approved tool calls.
 # PARALLEL_TOOL_CALLS controls whether the LLM may emit multiple tool calls
 # in a single response. Keep this 'n' — it is incompatible with per-call
 # approval prompts and is unnecessary: the parallel_internet_research_agent
