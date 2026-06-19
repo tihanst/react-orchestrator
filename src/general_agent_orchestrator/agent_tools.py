@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Callable, Literal
+from typing import Annotated, Any, Callable 
 from pathlib import Path
 import os
 from datetime import datetime
@@ -9,12 +9,27 @@ from tavily import TavilyClient
 
 from langchain_core.tools import tool # type: ignore
 
-from .settings import Settings
+from .settings import settings
 
-SETTINGS = Settings()
+SETTINGS = settings
+
+@tool 
+def parallel_internet_research_agent(
+    queries: Annotated[
+        list[str],("Run multiple simultaneous standalone search queries for research to be done in parallel. "
+        "Each item should be a full natural-language search statement or question, independent of the others. "
+        )
+    ]
+    ) -> str:
+    """Delegate one or more independent research sub-tasks to be searched and synthesized in parallel. 
+    Use this instead of internet_research when the task can be split into multiple independent searches which will ultimately be synthesized.
+    This tool is never executed directly, but is intercepted by the router to tringger the fan-out pattern via Send."""
+
+    return ""
+
 
 @tool
-def tavily_search_tool(
+def internet_research(
         query: Annotated[
             str, 
             "The full, complete, and unmodified conversational question. "
@@ -22,7 +37,7 @@ def tavily_search_tool(
             "Pass the exact natural language intent."
             ]
     ) -> str:
-    """Executes a web search using the Tavily search engine.
+    """Executes a web search using the a websearch client.
     
     Use this tool to find up-to-date information on the web. 
     When calling this tool, you must pass the user's inquiry as a complete, 
@@ -30,23 +45,30 @@ def tavily_search_tool(
     keyword string (e.g., do NOT pass 'best practices prompting LLM', 
     instead pass 'What are the best practices for prompting an LLM?')."""
 
-    client = TavilyClient(api_key=SETTINGS.tavily_api_key)
+    client = TavilyClient(api_key=SETTINGS.websearch_api_key)
 
     resp = client.search(
         query=query,
         search_depth='advanced',
         chunks_per_source=3,
-        max_results=5,
+        max_results=10,
         include_answer=True,
         include_raw_content=True,
         exclude_domains=['medium.com', 'linkedin.com', 'facebook.com'],
         include_usage=True   
     )
 
-    with open(Path(SETTINGS.tavily_logs) / "tav_logs.log", "a+") as f:
+    with open(Path(SETTINGS.search_logs) / "search_logs.log", "a+") as f:
         try:
-            paylod = json.dumps(resp)
-            f.write(paylod+'\n')
+            
+            final_payload: dict[str, Any] = {
+                "single_or_multiple":"single",
+                "time": datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
+                "payload": resp 
+            }
+            
+            f.write(json.dumps(final_payload) + '\n')
+        
         except Exception as e:
             print(f"Problem json serializing with e as:\n{e}")
 
@@ -177,7 +199,7 @@ def get_file_size(
 
 
 @tool
-def find_file_in_current_directory(
+def find_file_in_directory(
     name: Annotated[str, "Filename to search for, e.g. 'config.json'"],
     directory: Annotated[
         str, "Directory to search in; defaults to the current working directory"
@@ -203,16 +225,13 @@ def find_file_in_current_directory(
 
     if '*' in name:
 
-        recursive_call: Callable[[Any,Any, Any], Any] = partial(find_file_in_current_directory, directory=path, fuzzy=fuzzy)
+        recursive_call: Callable[[Any,Any, Any], Any] = partial(find_file_in_directory, directory=path, fuzzy=fuzzy)
         clean_name = [x for x in name.split('*') if x != '']
         matches = map(recursive_call, clean_name)
         
         final_match= []
         for x in matches: #a list of dictionaries {filename:xxx, matchtype:yyy}
             for dictionary in x:
-                # print(dictionary)
-                # print([val for x in final_match for val in x.values()])
-                # print('-----')
                 if dictionary['filename'] not in [val for x in final_match for val in x.values()]:
                     final_match.append(dictionary)
         return final_match
@@ -246,7 +265,7 @@ def find_file_in_current_directory(
 
 
 @tool
-def find_file_in_current_and_subdirectories(
+def find_file_in_directory_or_subdirectories(
     name: Annotated[str, "Filename to search for, e.g. 'config.json'"],
     directory: Annotated[
         str,
@@ -347,7 +366,6 @@ def get_file_contents(
     try:
         with open(Path(file).expanduser().resolve()) as f:
             content = f.read()
-            #print(f"------{content}------")
             if len(content) / 1.3 <= token_limit:
                 return content
             else:
@@ -401,3 +419,29 @@ def get_full_directory_information(
             }
             results.append(temp)
     return results
+
+
+# Tool registry
+
+TOOL_NODE_ROUTED_TOOLS = [
+    internet_research,
+    change_directory,
+    list_directory,
+    get_working_directory,
+    path_exists,
+    list_files_recursive,
+    make_directory,
+    get_file_size,
+    find_file_in_directory,
+    find_file_in_directory_or_subdirectories,
+    search_file_contents,
+    get_file_contents,
+    write_markdown_file,
+    get_full_directory_information
+] # Everything except parallel_internet_research_agent
+
+VIRTUAL_TOOLS_FAN_OUT = [
+    parallel_internet_research_agent
+]
+
+ALL_TOOLS = TOOL_NODE_ROUTED_TOOLS + VIRTUAL_TOOLS_FAN_OUT

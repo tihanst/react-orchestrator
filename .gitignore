@@ -17,3 +17,6 @@ logs*
 
 # Notebooks
 *.ipynb
+
+# Sundry 
+utils/draw_correct_flow.py
