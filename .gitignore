@@ -13,10 +13,13 @@ wheels/
 .env
 
 # Logs
-logs*
+logs**
+!logs/
+!logs/**/.gitkeep
+!logs/.gitkeep
+
 
 # Notebooks
 *.ipynb
 
 # Sundry 
-utils/draw_correct_flow.py
