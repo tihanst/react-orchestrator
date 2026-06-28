@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Callable 
+from typing import Annotated, Any, Callable
 from pathlib import Path
 import os
 from datetime import datetime
@@ -6,6 +6,7 @@ from functools import partial
 import json
 
 from tavily import TavilyClient
+from pydantic import Field
 
 from langchain_core.tools import tool # type: ignore
 
@@ -16,7 +17,7 @@ SETTINGS = settings
 @tool 
 def parallel_internet_research_agent(
     queries: Annotated[
-        list[str],("Run multiple simultaneous standalone search queries for research to be done in parallel. "
+        list[str],Field(description="Run multiple simultaneous standalone search queries for research to be done in parallel. "
         "Each item should be a full natural-language search statement or question, independent of the others. "
         )
     ]
@@ -32,10 +33,11 @@ def parallel_internet_research_agent(
 def internet_research(
         query: Annotated[
             str, 
-            "The full, complete, and unmodified conversational question. "
+            Field(description="The full, complete, and unmodified conversational question. "
             "CRITICAL: Do NOT extract keywords, summarize, or truncate. "
             "Pass the exact natural language intent."
-            ]
+            )
+        ]
     ) -> str:
     """Executes a web search using the a websearch client.
     
@@ -80,7 +82,7 @@ def internet_research(
 @tool
 def change_directory(
     directory: Annotated[
-        str, "Path to the directory to change into; relative or absolute"
+        str, Field(description="Path to the directory to change into; relative or absolute")
     ],
 ) -> str | None:
     """Change the current working directory to the given path."""
@@ -95,7 +97,7 @@ def change_directory(
 @tool
 def list_directory(
     directory: Annotated[
-        str | None, "Optional path. If not provided, lists the current directory."
+        str | None, Field(description="Optional path. If not provided, lists the current directory.")
     ] = None,
 ) -> list[str] | str:
     """List the names of all entries in the given directory."""
@@ -116,7 +118,7 @@ def get_working_directory() -> str:
 
 @tool
 def path_exists(
-    target: Annotated[str, "Path to check; relative or absolute"],
+    target: Annotated[str, Field(description="Path to check; relative or absolute")],
 ) -> bool:
     """Check whether a file or directory exists at the given path."""
     path = Path(target).expanduser().resolve()
@@ -125,7 +127,7 @@ def path_exists(
 
 @tool
 def is_directory(
-    target: Annotated[str, "Path to check; relative or absolute"],
+    target: Annotated[str, Field(description="Path to check; relative or absolute")],
 ) -> bool:
     """Check whether the given path exists and is a directory."""
     path = Path(target).expanduser()
@@ -134,7 +136,7 @@ def is_directory(
 
 @tool
 def is_file(
-    target: Annotated[str, "Path to check; relative or absolute"],
+    target: Annotated[str, Field(description="Path to check; relative or absolute")],
 ) -> bool:
     """Check whether the given path exists and is a regular file."""
     path = Path(target).expanduser()
@@ -143,7 +145,7 @@ def is_file(
 
 @tool
 def get_absolute_path(
-    target: Annotated[str, "Relative or absolute path to resolve"],
+    target: Annotated[str, Field(description="Relative or absolute path to resolve")],
 ) -> str:
     """Return the fully resolved absolute path of the given path."""
     path = Path(target).expanduser()
@@ -153,10 +155,10 @@ def get_absolute_path(
 @tool
 def list_files_recursive(
     directory: Annotated[
-        str, "Directory to search under; defaults to the current working directory"
+        str, Field(description="Directory to search under; defaults to the current working directory")
     ] = ".",
     pattern: Annotated[
-        str, "Glob pattern to match filenames against, e.g. '*.py' or '*'"
+        str, Field(description="Glob pattern to match filenames against, e.g. '*.py' or '*'")
     ] = "*",
 ) -> list[str] | str:
     """List all files matching the glob pattern recursively under the given directory."""
@@ -172,7 +174,7 @@ def list_files_recursive(
 def make_directory(
     directory: Annotated[
         str,
-        "Relative path of the directory to create; intermediate directories are created as needed if directory is nested.",
+        Field(description="Relative path of the directory to create; intermediate directories are created as needed if directory is nested."),
     ],
 ) -> str | None:
     """Create a directory along with any missing parent directories."""
@@ -187,7 +189,7 @@ def make_directory(
 
 @tool
 def get_file_size(
-    target: Annotated[str, "Path to the file whose size should be returned"],
+    target: Annotated[str, Field(description="Path to the file whose size should be returned")],
 ) -> int | str:
     """Return the size of the given file in bytes."""
     path = Path(target).expanduser().resolve()
@@ -200,13 +202,13 @@ def get_file_size(
 
 @tool
 def find_file_in_directory(
-    name: Annotated[str, "Filename to search for, e.g. 'config.json'"],
+    name: Annotated[str, Field(description="Filename to search for, e.g. 'config.json'")],
     directory: Annotated[
-        str, "Directory to search in; defaults to the current working directory"
+        str, Field(description="Directory to search in; defaults to the current working directory")
     ] = ".",
     fuzzy: Annotated[
         bool,
-        "If True, fall back to case-insensitive substring matching when no exact match is found",
+        Field(description="If True, fall back to case-insensitive substring matching when no exact match is found"),
     ] = True,
 ) -> list[dict[str, Any]] | str:
     """Non-recursive search for a file by name in a single directory.
@@ -266,14 +268,14 @@ def find_file_in_directory(
 
 @tool
 def find_file_in_directory_or_subdirectories(
-    name: Annotated[str, "Filename to search for, e.g. 'config.json'"],
+    name: Annotated[str, Field(description="Filename to search for, e.g. 'config.json'")],
     directory: Annotated[
         str,
-        "Directory to start the recursive search from; defaults to the current working directory",
+        Field(description="Directory to start the recursive search from; defaults to the current working directory"),
     ] = ".",
     fuzzy: Annotated[
         bool,
-        "If True, fall back to case-insensitive substring matching when no exact match is found",
+        Field(description="If True, fall back to case-insensitive substring matching when no exact match is found"),
     ] = True,
 ) -> list[dict[str, Any]] | str:
     """Recursive search for a file by name across an entire directory tree. Walks into all subdirectories.
@@ -313,12 +315,12 @@ def find_file_in_directory_or_subdirectories(
 
 @tool
 def search_file_contents(
-    filepath: Annotated[str, "Path to the file to search within"],
+    filepath: Annotated[str, Field(description="Path to the file to search within")],
     term: Annotated[
-        str, "Keyword or phrase to search for; matching is case-insensitive"
+        str, Field(description="Keyword or phrase to search for; matching is case-insensitive")
     ],
     context: Annotated[
-        int, "Number of context lines to include before and after each match"
+        int, Field(description="Number of context lines to include before and after each match")
     ] = 3,
 ) -> list[dict[str, Any]] | str:
     """Search a file for a keyword or phrase.
@@ -358,7 +360,7 @@ def search_file_contents(
 
 @tool
 def get_file_contents(
-    file: Annotated[str, "file whose context to get; may include its filepath"],
+    file: Annotated[str, Field(description="file whose context to get; may include its filepath")],
     #token_limit: Annotated[Literal[1000], "Maximum number of tokens to return, do not override this"] = 1000,
 ) -> str:
     """Return the text contents of a file, truncated to approximately the value of token_limit (hard-coded in the function) tokens."""
@@ -377,10 +379,10 @@ def get_file_contents(
 @tool
 def write_markdown_file(
     directory: Annotated[
-        str, "Path to the directory to write the markdown file into; relative or absolute"
+        str, Field(description="Path to the directory to write the markdown file into; relative or absolute")
     ],
-    info_to_write: Annotated[str, "Markdown formatted text to write to the file"],
-    file_name: Annotated[str, "The name of the file to write to"],
+    info_to_write: Annotated[str, Field(description="Markdown formatted text to write to the file")],
+    file_name: Annotated[str, Field(description="The name of the file to write to")],
 ) -> str | None:
     """Write markdown content to a timestamped file in the given directory, creating the directory if needed."""
     path = Path(directory).expanduser().resolve()
@@ -402,7 +404,7 @@ def write_markdown_file(
 
 @tool
 def get_full_directory_information(
-    directory: Annotated[str, "Directory to get full information on"]
+    directory: Annotated[str, Field(description="Directory to get full information on")]
     ) -> list[dict[str,Any]]:
     """Get information and statistics about contents of given directory."""
     

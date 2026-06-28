@@ -12,14 +12,14 @@ wheels/
 # Secrets
 .env
 
-# Logs
-logs**
-!logs/
-!logs/**/.gitkeep
+# Logs - ignore content, keep folder structure via .gitkeep
+logs/**
 !logs/.gitkeep
+!logs/*/
+!logs/*/.gitkeep
 
 
 # Notebooks
 *.ipynb
 
-# Sundry 
+# Sundry
