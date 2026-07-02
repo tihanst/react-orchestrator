@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReAct Orchestrator — Flow Documentation</title>
+<style>
+  .viz-root {
+    --surface-1:      #fcfcfb;
+    --surface-2:      #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+
+    --blue:    #2a78d6;
+    --aqua:    #1baf7a;
+    --yellow:  #eda100;
+    --green:   #008300;
+    --violet:  #4a3aa7;
+    --red:     #e34948;
+    --magenta: #e87ba4;
+    --orange:  #eb6834;
+    --neutral: #898781;
+
+    --good: #0ca30c;
+    --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --surface-1:      #1a1a19;
+      --surface-2:      #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+
+      --blue:    #3987e5;
+      --aqua:    #199e70;
+      --yellow:  #c98500;
+      --green:   #008300;
+      --violet:  #9085e9;
+      --red:     #e66767;
+      --magenta: #d55181;
+      --orange:  #d95926;
+      --neutral: #898781;
+
+      --good: #0ca30c;
+      --critical: #e66767;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--surface-2);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  body { padding-bottom: 60px; }
+
+  header.page-head {
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-1);
+  }
+  header.page-head h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+  header.page-head p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    max-width: 900px;
+    line-height: 1.5;
+  }
+  header.page-head .meta-row {
+    margin-top: 10px;
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 32px 0;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  /* Flow list */
+  .flow-list h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin: 0;
+    padding: 14px 16px 8px;
+  }
+  .flow-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-top: 1px solid var(--gridline);
+    padding: 11px 16px;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+  .flow-item:hover { background: var(--surface-2); }
+  .flow-item.active { background: var(--surface-2); }
+  .flow-item .dot {
+    flex: 0 0 auto;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent, var(--neutral));
+  }
+  .flow-item .name { font-weight: 500; line-height: 1.3; }
+  .flow-item.active .name { color: var(--accent, var(--text-primary)); }
+
+  /* Diagram */
+  .diagram-wrap { padding: 8px 8px 0; }
+  svg#diagram { width: 100%; height: auto; display: block; }
+
+  .node-box rect {
+    fill: var(--surface-1);
+    stroke: var(--node-color, var(--baseline));
+    stroke-width: 2;
+    transition: opacity .18s ease, stroke-width .18s ease;
+  }
+  .node-box .chip {
+    fill: var(--node-color, var(--baseline));
+  }
+  .node-box text.title {
+    fill: var(--text-primary);
+    font-size: 12.5px;
+    font-family: inherit;
+    font-weight: 600;
+  }
+  .node-box text.subtitle {
+    fill: var(--text-muted);
+    font-size: 9.5px;
+    font-family: inherit;
+  }
+  .node-box.terminal rect { stroke-dasharray: 3 3; }
+
+  .edge path {
+    fill: none;
+    stroke: var(--baseline);
+    stroke-width: 1.6;
+    transition: opacity .18s ease, stroke-width .18s ease, stroke .18s ease;
+    marker-end: url(#arrow-default);
+  }
+  .edge.rejected path { stroke: var(--red); stroke-dasharray: 5 3; marker-end: url(#arrow-red); }
+  .edge.fanout path { stroke: var(--violet); stroke-dasharray: 2 3; marker-end: url(#arrow-violet); }
+  .edge text {
+    fill: var(--text-secondary);
+    font-size: 9.5px;
+    font-family: inherit;
+    transition: opacity .18s ease;
+  }
+
+  .diagram-wrap.has-selection .node-box:not(.active) { opacity: 0.28; }
+  .diagram-wrap.has-selection .node-box:not(.active) rect { stroke: var(--baseline); }
+  .diagram-wrap.has-selection .edge:not(.active) { opacity: 0.16; }
+  .diagram-wrap.has-selection .edge.active path {
+    stroke: var(--flow-accent, var(--blue));
+    stroke-width: 3;
+    marker-end: url(#arrow-flow);
+  }
+  .diagram-wrap.has-selection .edge.active text { fill: var(--text-primary); font-weight: 600; }
+  .diagram-wrap.has-selection .node-box.active rect { stroke-width: 3; }
+
+  /* Detail panel */
+  .detail {
+    margin-top: 18px;
+    padding: 18px 20px;
+  }
+  .detail .placeholder {
+    color: var(--text-muted);
+    font-size: 13.5px;
+  }
+  .detail h3 {
+    margin: 0 0 4px;
+    font-size: 16px;
+  }
+  .detail .trigger {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin: 0 0 14px;
+    padding: 8px 10px;
+    background: var(--surface-2);
+    border-radius: 6px;
+    border-left: 3px solid var(--flow-accent-detail, var(--blue));
+  }
+  .detail .summary { font-size: 13.5px; color: var(--text-secondary); margin: 0 0 14px; line-height: 1.5; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  ol.steps li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 14px 30px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  ol.steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 0;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--flow-accent-detail, var(--blue));
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  ol.steps li .ref {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  section.data-section {
+    margin-top: 28px;
+  }
+  section.data-section h2 {
+    font-size: 15px;
+    margin: 0 0 4px;
+  }
+  section.data-section .sub {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin: 0 0 12px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  table th {
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--baseline);
+  }
+  table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--gridline);
+    vertical-align: top;
+    color: var(--text-secondary);
+  }
+  table td.code, table code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px;
+    color: var(--text-primary);
+  }
+  .tag {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  footer.note {
+    max-width: 1400px;
+    margin: 32px auto 0;
+    padding: 0 32px;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body class="viz-root">
+
+<header class="page-head">
+  <h1 id="app-title">ReAct Orchestrator</h1>
+  <p id="app-desc"></p>
+  <div class="meta-row">
+    <span>Entry point: <code id="entry-point"></code></span>
+    <span id="source-file-count"></span>
+  </div>
+</header>
+
+<main>
+  <div class="layout">
+    <div class="panel flow-list">
+      <h2>Main flows</h2>
+      <button class="flow-item" data-flow-id="" id="flow-item-overview">
+        <span class="dot" style="--accent: var(--baseline)"></span>
+        <span class="name">Overview (full graph)</span>
+      </button>
+      <div id="flow-items"></div>
+    </div>
+
+    <div>
+      <div class="panel diagram-wrap" id="diagram-wrap">
+        <svg id="diagram" viewBox="0 0 1000 660" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow-default" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="var(--baseline)"></path>
+            </marker>
+            <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="var(--red)"></path>
+            </marker>
+            <marker id="arrow-violet" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="var(--violet)"></path>
+            </marker>
+            <marker id="arrow-flow" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto">
+              <path d="M0,0 L9,4.5 L0,9 Z" fill="var(--flow-accent, var(--blue))"></path>
+            </marker>
+          </defs>
+
+          <!-- Edges (drawn first, under nodes) -->
+          <g id="edges-layer"></g>
+          <!-- Nodes -->
+          <g id="nodes-layer"></g>
+        </svg>
+      </div>
+
+      <div class="panel detail" id="detail-panel">
+        <p class="placeholder">Select a flow on the left to highlight its exact path through the graph and see a step-by-step trace with file/line references. The diagram above always reflects the live LangGraph topology defined in <code>graph.py</code>.</p>
+      </div>
+    </div>
+  </div>
+
+  <section class="data-section grid-2">
+    <div>
+      <h2>Tools</h2>
+      <p class="sub">Routed tools execute through the <code>tools</code> ToolNode. Virtual tools never execute — they are intercepted by the router.</p>
+      <table id="tools-table">
+        <thead><tr><th>Tool</th><th>Location</th><th>Description</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div>
+      <h2>Agent state schema</h2>
+      <p class="sub"><code id="state-file"></code></p>
+      <table id="state-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="data-section grid-2">
+    <div>
+      <h2>Settings (.env)</h2>
+      <table id="settings-table">
+        <thead><tr><th>Env var</th><th>Description</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div>
+      <h2>Logging targets</h2>
+      <table id="logging-table">
+        <thead><tr><th>Target</th><th>File</th><th>When</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer class="note">
+  Generated from the LangGraph topology in <code>src/react_orchestrator/graph.py</code>, <code>nodes.py</code>,
+  <code>state.py</code>, <code>agent_tools.py</code>, <code>settings.py</code>, <code>agent_logger.py</code> and
+  <code>main.py</code>. Data source: <code>docs/flows.json</code> (embedded inline here for portability; the
+  standalone file mirrors this data exactly).
+</footer>
+
+<script id="flow-data" type="application/json">
+{
+  "meta": {
+    "project": "ReAct Orchestrator",
+    "package": "react-orchestrator",
+    "description": "A LangGraph-based ReAct agent harness with human-in-the-loop tool approval and a reusable fan-out/fan-in orchestration pattern for parallel research sub-agents.",
+    "entry_point": "react_orchestrator.main:main",
+    "source_files": [
+      "src/react_orchestrator/main.py",
+      "src/react_orchestrator/graph.py",
+      "src/react_orchestrator/nodes.py",
+      "src/react_orchestrator/state.py",
+      "src/react_orchestrator/agent_tools.py",
+      "src/react_orchestrator/settings.py",
+      "src/react_orchestrator/agent_logger.py",
+      "utils/draw_correct_flow.py"
+    ]
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "start",
+        "label": "__start__",
+        "type": "terminal",
+        "file": "graph.py",
+        "ref": "graph.py:40",
+        "description": "Entry point of the compiled LangGraph StateGraph (builder.set_entry_point(\"assistant\"))."
+      },
+      {
+        "id": "assistant",
+        "label": "assistant",
+        "type": "llm",
+        "file": "nodes.py",
+        "ref": "nodes.py:37-53",
+        "description": "Main ReAct LLM node. Streams a ChatTogether completion bound to ALL_TOOLS, reassembles the streamed chunks into a single AIMessage, and appends it to state.messages."
+      },
+      {
+        "id": "check_tool_permission",
+        "label": "check_tool_permission",
+        "type": "control",
+        "file": "nodes.py",
+        "ref": "nodes.py:69-89",
+        "description": "Human-in-the-loop gate. If ask_tool_permission == 'y', calls interrupt() to pause the graph and prompt the user to approve/deny the pending tool call. On denial, injects a ToolMessage rejection. On approval (or when gating is off), passes through unchanged."
+      },
+      {
+        "id": "tools",
+        "label": "tools (ToolNode)",
+        "type": "tool_executor",
+        "file": "graph.py / agent_tools.py",
+        "ref": "graph.py:22,27",
+        "description": "LangGraph prebuilt ToolNode wrapping every entry in TOOL_NODE_ROUTED_TOOLS (all real tools except the virtual fan-out tool). Executes the tool the assistant chose and returns a ToolMessage."
+      },
+      {
+        "id": "research_agent_node",
+        "label": "research_agent_node ×N (parallel)",
+        "type": "worker",
+        "file": "nodes.py",
+        "ref": "nodes.py:109-166",
+        "description": "Fan-out worker. One instance is dispatched per query via langgraph.types.Send. Each runs an independent Tavily search, logs the raw response, and synthesizes it with a dedicated research_llm call. Results accumulate into state.research_results via the add_or_reset reducer."
+      },
+      {
+        "id": "compile_research",
+        "label": "compile_research",
+        "type": "aggregator",
+        "file": "nodes.py",
+        "ref": "nodes.py:170-188",
+        "description": "Fan-in join point. Joins all research_results into one string, wraps it in a single ToolMessage addressed to the original parallel_internet_research_agent tool call, records it in compiled_results, and resets research_results to []."
+      },
+      {
+        "id": "end",
+        "label": "__end__",
+        "type": "terminal",
+        "file": "graph.py",
+        "ref": "graph.py:31",
+        "description": "Terminal node reached when the assistant produces a final answer with no further tool calls."
+      }
+    ],
+    "edges": [
+      {
+        "id": "e_start_assistant",
+        "from": "start",
+        "to": "assistant",
+        "kind": "normal",
+        "label": "invoke",
+        "description": "Graph entry point routes directly into the assistant node."
+      },
+      {
+        "id": "e_assistant_check",
+        "from": "assistant",
+        "to": "check_tool_permission",
+        "kind": "conditional",
+        "label": "tool call(s) emitted",
+        "description": "check_tool_or_end (nodes.py:57-66) sees an AIMessage with tool_calls and routes to the permission gate.",
+        "condition_fn": "check_tool_or_end"
+      },
+      {
+        "id": "e_assistant_end",
+        "from": "assistant",
+        "to": "end",
+        "kind": "conditional",
+        "label": "no tool calls",
+        "description": "check_tool_or_end sees a plain AIMessage with no tool_calls and routes to END; this is a final answer.",
+        "condition_fn": "check_tool_or_end"
+      },
+      {
+        "id": "e_check_tools",
+        "from": "check_tool_permission",
+        "to": "tools",
+        "kind": "conditional",
+        "label": "approved / auto-approved",
+        "description": "after_check_tool_permission (nodes.py:92-106) sees the tool call was approved (or gating disabled) and routes to the ToolNode for a standard tool.",
+        "condition_fn": "after_check_tool_permission"
+      },
+      {
+        "id": "e_check_rejected",
+        "from": "check_tool_permission",
+        "to": "assistant",
+        "kind": "rejected",
+        "label": "rejected → denial ToolMessage",
+        "description": "User answered anything not starting with 'y' at the interrupt prompt. A ToolMessage denial was appended to state; after_check_tool_permission detects it and loops back to assistant.",
+        "condition_fn": "after_check_tool_permission"
+      },
+      {
+        "id": "e_check_fanout",
+        "from": "check_tool_permission",
+        "to": "research_agent_node",
+        "kind": "fanout",
+        "label": "fan-out (Send ×N)",
+        "description": "after_check_tool_permission detects the tool name is parallel_internet_research_agent (a VIRTUAL_TOOLS_FAN_OUT member) and returns one Send(\"research_agent_node\", {query: q}) per query — dispatched concurrently.",
+        "condition_fn": "after_check_tool_permission"
+      },
+      {
+        "id": "e_tools_assistant",
+        "from": "tools",
+        "to": "assistant",
+        "kind": "normal",
+        "label": "tool result",
+        "description": "graph.py:35 static edge. The ToolMessage produced by the executed tool is fed back to the assistant to continue reasoning."
+      },
+      {
+        "id": "e_research_compile",
+        "from": "research_agent_node",
+        "to": "compile_research",
+        "kind": "normal",
+        "label": "join",
+        "description": "graph.py:33 static edge. Every parallel branch converges here once all Send-dispatched workers complete."
+      },
+      {
+        "id": "e_compile_assistant",
+        "from": "compile_research",
+        "to": "assistant",
+        "kind": "normal",
+        "label": "compiled research ToolMessage",
+        "description": "graph.py:34 static edge. The synthesized, joined research is handed back to the assistant as a single tool result."
+      }
+    ]
+  },
+  "tools": {
+    "routed": [
+      { "name": "internet_research", "file": "agent_tools.py:32-79", "description": "Single web search via TavilyClient; expects a full natural-language query. Logs request/response to search_logs (tagged 'single')." },
+      { "name": "change_directory", "file": "agent_tools.py:82-94", "description": "os.chdir to the given path." },
+      { "name": "list_directory", "file": "agent_tools.py:97-110", "description": "Lists entry names in a directory (defaults to cwd)." },
+      { "name": "get_working_directory", "file": "agent_tools.py:113-116", "description": "Returns the absolute cwd." },
+      { "name": "path_exists", "file": "agent_tools.py:119-125", "description": "Checks whether a path exists." },
+      { "name": "is_directory", "file": "agent_tools.py:128-134", "description": "Checks whether a path is a directory." },
+      { "name": "is_file", "file": "agent_tools.py:137-143", "description": "Checks whether a path is a regular file." },
+      { "name": "get_absolute_path", "file": "agent_tools.py:146-152", "description": "Resolves a path to its absolute form." },
+      { "name": "list_files_recursive", "file": "agent_tools.py:155-170", "description": "Recursively lists files matching a glob pattern." },
+      { "name": "make_directory", "file": "agent_tools.py:173-187", "description": "Creates a directory tree, including missing parents." },
+      { "name": "get_file_size", "file": "agent_tools.py:190-200", "description": "Returns a file's size in bytes." },
+      { "name": "find_file_in_directory", "file": "agent_tools.py:203-266", "description": "Non-recursive filename search in one directory, with optional fuzzy fallback; handles '*' wildcards by splitting and recursing." },
+      { "name": "find_file_in_directory_or_subdirectories", "file": "agent_tools.py:269-313", "description": "Recursive filename search across an entire directory tree, with optional fuzzy fallback." },
+      { "name": "search_file_contents", "file": "agent_tools.py:316-358", "description": "Case-insensitive keyword/phrase search within a file, returning matches with surrounding context lines." },
+      { "name": "get_file_contents", "file": "agent_tools.py:361-376", "description": "Reads a file's text content, truncated to ~1000 tokens." },
+      { "name": "write_markdown_file", "file": "agent_tools.py:379-402", "description": "Writes markdown content to a timestamped file, creating the directory if needed." },
+      { "name": "get_full_directory_information", "file": "agent_tools.py:405-423", "description": "Returns name, is_file, last_modified, and size for every entry in a directory." }
+    ],
+    "virtual": [
+      { "name": "parallel_internet_research_agent", "file": "agent_tools.py:17-29", "description": "Never executed directly — its no-op body always returns \"\". Intercepted by after_check_tool_permission to trigger the fan-out pattern via Send, one research_agent_node per query." }
+    ]
+  },
+  "state_schema": {
+    "file": "state.py",
+    "fields": [
+      { "name": "messages", "type": "list[AnyMessage] (MessagesState)", "description": "Full conversation history; standard LangGraph message-append reducer." },
+      { "name": "ask_tool_permission", "type": "Literal['y','n']", "description": "Whether check_tool_permission should interrupt for human approval before every tool call." },
+      { "name": "parallel_tool_calls", "type": "bool", "description": "Whether the assistant LLM may emit multiple tool calls in one turn. Kept 'n' in practice — incompatible with per-call approval." },
+      { "name": "research_results", "type": "list[str]", "description": "Accumulates one synthesized summary per fan-out branch (add_or_reset reducer, state.py:6-10); reset to [] by compile_research once joined." },
+      { "name": "query", "type": "str", "description": "Per-branch input consumed by a single research_agent_node instance (set via the Send payload)." },
+      { "name": "compiled_results", "type": "list[tuple[int,str]]", "description": "Running, indexed history of every compiled research result across the session (add_by_increment reducer, state.py:12-17)." }
+    ]
+  },
+  "settings": {
+    "file": "settings.py",
+    "env_file": ".env",
+    "fields": [
+      { "env_var": "TOGETHER_API_KEY", "description": "API key for the ChatTogether LLM backend." },
+      { "env_var": "WEBSEARCH_API_KEY", "description": "API key for the Tavily web search client." },
+      { "env_var": "LLM_MODEL", "description": "Model identifier passed to both the assistant and research ChatTogether instances." },
+      { "env_var": "LLM_MAX_TOKENS", "description": "Max output tokens for LLM completions." },
+      { "env_var": "ASK_TOOL_PERMISSIONS", "description": "'y' to interrupt for approval before every tool call, 'n' to auto-approve." },
+      { "env_var": "PARALLEL_TOOL_CALLS", "description": "'y'/'n'. Validated at startup: cannot be 'y' at the same time as ASK_TOOL_PERMISSIONS='y' (settings.py:21-25)." },
+      { "env_var": "SEARCH_LOGS", "description": "Directory for search_logs.log JSONL search request/response records." },
+      { "env_var": "AGENT_RESPONSE_LOGS", "description": "Directory for response_history.jsonl full conversation dumps." },
+      { "env_var": "GENERAL_LOGS", "description": "Directory for general_log.log standard Python logging output." },
+      { "env_var": "LOGGING_LEVEL", "description": "DEBUG | INFO | WARNING | ERROR | CRITICAL — threshold for general_log.log." }
+    ]
+  },
+  "logging_targets": [
+    {
+      "name": "search_logs",
+      "file_written": "search_logs.log",
+      "written_by": "internet_research (agent_tools.py:63-75); research_agent_node (nodes.py:138-149)",
+      "when": "Every web search call, tagged single_or_multiple = 'single' or 'multiple'. Fan-out writes are guarded by a threading.Lock."
+    },
+    {
+      "name": "agent_response_logs",
+      "file_written": "response_history.jsonl",
+      "written_by": "cleanup_before_quit (main.py:35-48)",
+      "when": "Once, on clean exit ('!exit'). Dumps the full final message history via messages_to_dict."
+    },
+    {
+      "name": "general_logs",
+      "file_written": "general_log.log",
+      "written_by": "agent_logger.py:24-28 (logging.basicConfig); logger.debug/info calls throughout nodes.py",
+      "when": "Continuously, at every node entry and on cleanup, at the LOGGING_LEVEL threshold."
+    }
+  ],
+  "flows": [
+    {
+      "id": "startup",
+      "name": "Startup & Graph Compilation",
+      "accent": "neutral",
+      "summary": "Process boot: render the architecture diagram if missing, build the system prompt, and initialize a fresh checkpointed thread.",
+      "trigger": "Process launched via `uv run react-orchestrator` (or `python -m react_orchestrator.main`).",
+      "nodes": ["start"],
+      "edges": [],
+      "steps": [
+        { "ref": "main.py:53-56", "description": "If docs/agent_graph.png does not exist, shell out to `uv run python utils/draw_correct_flow.py` to render it via matplotlib." },
+        { "ref": "graph.py:19-42", "description": "Module import time: StateGraph is built with all 5 nodes and edges, then builder.compile(checkpointer=MemorySaver()) produces the importable `graph` object." },
+        { "ref": "main.py:60-63", "description": "Build the initial SystemMessage — either the caller-supplied system_prompt or DEFAULT_SYSTEM_MSG (main.py:23-33), which instructs the model on tool usage conventions." },
+        { "ref": "main.py:65-72", "description": "Generate a thread_id (agent_name + timestamp) and wrap it in a RunnableConfig — this is the checkpointer key that gives the session persistent memory." },
+        { "ref": "main.py:75-79", "description": "Construct the initial AgentState with empty messages and ask_tool_permission / parallel_tool_calls pulled from Settings." }
+      ]
+    },
+    {
+      "id": "no_tool_turn",
+      "name": "Standard Conversational Turn (No Tool Use)",
+      "accent": "blue",
+      "summary": "The simplest path: the user asks something the model can answer directly, with no tool calls at all.",
+      "trigger": "User enters a prompt at the REPL that the LLM can answer without any tool.",
+      "nodes": ["start", "assistant", "end"],
+      "edges": ["e_start_assistant", "e_assistant_end"],
+      "steps": [
+        { "ref": "main.py:87-99", "description": "REPL reads the prompt, appends a HumanMessage to agent_state[\"messages\"]." },
+        { "ref": "main.py:102-104", "description": "graph.stream(agent_state, config, stream_mode='messages') is called; tokens from the assistant node are printed as they stream." },
+        { "ref": "nodes.py:37-53", "description": "assistant node streams the ChatTogether completion and reduces the chunks into one AIMessage." },
+        { "ref": "nodes.py:57-66", "description": "check_tool_or_end finds no tool_calls on the AIMessage and returns END." },
+        { "ref": "main.py:107-117", "description": "The inner permission-check loop finds state.next is empty (no pending interrupt) and breaks immediately — back to the prompt." }
+      ]
+    },
+    {
+      "id": "tool_autoapproved",
+      "name": "Tool Call — Auto-Approved",
+      "accent": "yellow",
+      "summary": "ASK_TOOL_PERMISSIONS='n': any standard tool the model chooses runs immediately, no interrupt.",
+      "trigger": "Model emits a tool call (e.g. get_file_contents) while ask_tool_permission == 'n'.",
+      "nodes": ["assistant", "check_tool_permission", "tools"],
+      "edges": ["e_assistant_check", "e_check_tools", "e_tools_assistant"],
+      "steps": [
+        { "ref": "nodes.py:37-53", "description": "assistant emits an AIMessage with one tool_call (parallel tool calls are hard-disabled elsewhere, nodes.py:74)." },
+        { "ref": "nodes.py:57-66", "description": "check_tool_or_end routes to check_tool_permission because tool_calls is non-empty." },
+        { "ref": "nodes.py:69-89", "description": "check_tool_permission sees ask_tool_permission != 'y' and returns {} without calling interrupt()." },
+        { "ref": "nodes.py:92-106", "description": "after_check_tool_permission sees the last message is still the AIMessage (not a ToolMessage) and the tool isn't in VIRTUAL_TOOLS_FAN_OUT, so it routes to \"tools\"." },
+        { "ref": "graph.py:22,27,35", "description": "The prebuilt ToolNode executes the chosen tool function and appends its ToolMessage; the static edge sends control back to assistant." }
+      ]
+    },
+    {
+      "id": "tool_hitl_approved",
+      "name": "Tool Call — Human Approval Granted",
+      "accent": "aqua",
+      "summary": "ASK_TOOL_PERMISSIONS='y': the graph pauses on an interrupt() and waits for the user to type 'y' before running the tool.",
+      "trigger": "Model emits a tool call while ask_tool_permission == 'y', and the user approves.",
+      "nodes": ["assistant", "check_tool_permission", "tools"],
+      "edges": ["e_assistant_check", "e_check_tools", "e_tools_assistant"],
+      "steps": [
+        { "ref": "nodes.py:69-77", "description": "check_tool_permission builds a human-readable prompt (\"Call tool: X with arguments: ...\") and calls interrupt(prompt) — this suspends the graph run entirely; graph.stream() returns with nothing further to yield from this node." },
+        { "ref": "main.py:107-112", "description": "The REPL's inner loop calls graph.get_state(config); since state.next and state.tasks[0].interrupts are set, it reads the interrupt value and prompts the user directly with input(interrupt_value)." },
+        { "ref": "main.py:79", "description": "User types 'y' (or anything starting with 'y')." },
+        { "ref": "nodes.py:79-86", "description": "Resuming via Command(resume=user_input) re-enters check_tool_permission; tool_decision[0] == 'y' so it returns {} unchanged — approval granted, message state untouched." },
+        { "ref": "nodes.py:92-106 / graph.py:35", "description": "after_check_tool_permission routes to tools as in the auto-approved case; ToolNode executes and control returns to assistant." }
+      ]
+    },
+    {
+      "id": "tool_hitl_rejected",
+      "name": "Tool Call — Human Approval Denied",
+      "accent": "red",
+      "summary": "The user declines the pending tool call; the assistant is told the call was denied and must respond without the tool's output.",
+      "trigger": "Model emits a tool call while ask_tool_permission == 'y', and the user answers anything not starting with 'y'.",
+      "nodes": ["assistant", "check_tool_permission"],
+      "edges": ["e_assistant_check", "e_check_rejected"],
+      "steps": [
+        { "ref": "nodes.py:77", "description": "interrupt() pauses the graph with the same approval prompt as the approved path." },
+        { "ref": "main.py:110-115", "description": "REPL detects the pending interrupt, prompts the user, and resumes the graph with Command(resume=user_input)." },
+        { "ref": "nodes.py:79-83", "description": "tool_decision.strip().lower()[0] != 'y' — check_tool_permission builds a ToolMessage stating \"The user has denied the invocation of the tool {name}\", tagged with the original tool_call_id, and returns it as the new last message." },
+        { "ref": "nodes.py:92-98", "description": "after_check_tool_permission sees the last message is a ToolMessage (the denial) and routes straight back to \"assistant\" — the tools node is never reached." },
+        { "ref": "nodes.py:37-53", "description": "assistant re-invokes the LLM with the denial ToolMessage in context, and must respond or try a different approach." }
+      ]
+    },
+    {
+      "id": "single_web_search",
+      "name": "Single Web Search (internet_research)",
+      "accent": "yellow",
+      "summary": "The model chooses a single, non-parallel Tavily search rather than the fan-out research agent.",
+      "trigger": "Model emits internet_research(query) for a request that doesn't need to be split into independent sub-queries.",
+      "nodes": ["assistant", "check_tool_permission", "tools"],
+      "edges": ["e_assistant_check", "e_check_tools", "e_tools_assistant"],
+      "steps": [
+        { "ref": "main.py:23-33", "description": "DEFAULT_SYSTEM_MSG instructs the model to pass the user's full natural-language intent as the query, not a keyword string." },
+        { "ref": "agent_tools.py:32-49", "description": "internet_research's docstring reiterates the same constraint directly to the model at tool-selection time." },
+        { "ref": "graph.py:22,27", "description": "Routed through the standard ToolNode like any other real tool (subject to the same approval flow as tool_hitl_approved / tool_autoapproved)." },
+        { "ref": "agent_tools.py:52-61", "description": "TavilyClient.search() runs with search_depth='advanced', max_results=10, exclude_domains=[medium.com, linkedin.com, facebook.com]." },
+        { "ref": "agent_tools.py:63-75", "description": "Full response is appended to search_logs.log as JSONL tagged single_or_multiple='single'." },
+        { "ref": "agent_tools.py:77-79", "description": "Results are flattened to \"From {title}:\\n{content}\" blocks joined by newlines and returned as the tool's string output (becomes the ToolMessage content)." }
+      ]
+    },
+    {
+      "id": "research_fanout",
+      "name": "Parallel Research Fan-Out / Fan-In",
+      "accent": "violet",
+      "summary": "The model splits a research task into N independent queries; each runs concurrently in its own research_agent_node, and the results are synthesized back into one tool result.",
+      "trigger": "Model emits parallel_internet_research_agent(queries=[...]) for a task with multiple independent sub-questions.",
+      "nodes": ["assistant", "check_tool_permission", "research_agent_node", "compile_research"],
+      "edges": ["e_assistant_check", "e_check_fanout", "e_research_compile", "e_compile_assistant"],
+      "steps": [
+        { "ref": "agent_tools.py:17-29", "description": "parallel_internet_research_agent's real body just returns \"\" — it exists purely as an LLM-facing schema; it is never actually executed as a tool function." },
+        { "ref": "nodes.py:69-89", "description": "check_tool_permission still runs the normal approval gate first (if ask_tool_permission == 'y', the user approves/denies the fan-out call as a whole)." },
+        { "ref": "nodes.py:100-103", "description": "after_check_tool_permission checks if the tool name is in {t.name for t in VIRTUAL_TOOLS_FAN_OUT}; if so it reads the `queries` list and returns [Send(\"research_agent_node\", {\"query\": q}) for q in queries] — LangGraph dispatches these concurrently." },
+        { "ref": "nodes.py:109-136", "description": "Each research_agent_node instance runs an independent TavilyClient.search() (search_depth='advanced', max_results=5, chunks_per_source=3, exclude_domains as elsewhere)." },
+        { "ref": "nodes.py:138-149", "description": "Writes are appended to search_logs.log tagged 'multiple', guarded by a module-level threading.Lock (_search_log_lock) because branches may write concurrently." },
+        { "ref": "nodes.py:151-166", "description": "Results are formatted with per-result relevance scores and summarized by a dedicated research_llm.invoke() call using a synthesis-focused system prompt; the summary is returned as {\"research_results\": [analysis.content]}." },
+        { "ref": "state.py:6-10", "description": "The add_or_reset reducer on AgentState.research_results appends each branch's summary onto the shared list as branches complete." },
+        { "ref": "graph.py:33", "description": "All branches converge on the static edge research_agent_node → compile_research once every Send-dispatched task finishes." },
+        { "ref": "nodes.py:170-188", "description": "compile_research joins all research_results with \"\\n\\n\\n\", wraps them in one ToolMessage tagged with the original tool_call_id, appends to compiled_results (add_by_increment reducer, state.py:12-17), and resets research_results to [] so the next fan-out starts clean." },
+        { "ref": "graph.py:34", "description": "compile_research → assistant static edge hands the synthesized research back to the main LLM loop." }
+      ]
+    },
+    {
+      "id": "multi_turn_memory",
+      "name": "Multi-Turn Conversation Memory",
+      "accent": "green",
+      "summary": "Follow-up turns reuse the same thread_id, so LangGraph's MemorySaver checkpointer restores full prior context automatically.",
+      "trigger": "User enters a second (or later) prompt in the same REPL session, after the first turn reached END.",
+      "nodes": ["assistant", "end"],
+      "edges": ["e_assistant_end"],
+      "steps": [
+        { "ref": "graph.py:41-42", "description": "memory = MemorySaver(); graph = builder.compile(checkpointer=memory) — every invocation is checkpointed under its thread_id." },
+        { "ref": "main.py:68-72", "description": "The RunnableConfig's configurable.thread_id is generated once at startup and reused for every graph.stream()/graph.get_state() call for the life of the process." },
+        { "ref": "main.py:94-99", "description": "On follow-up turns, start_flag != 0, so the REPL simply appends a new HumanMessage to the in-memory agent_state[\"messages\"] list rather than rebuilding it." },
+        { "ref": "main.py:102", "description": "graph.stream(agent_state, config=config, ...) re-enters the graph at \"assistant\"; because the checkpointer already holds prior state under this thread_id, LangGraph merges/continues rather than starting fresh." },
+        { "ref": "nodes.py:57-66", "description": "Reaches check_tool_or_end → END exactly as in the first turn if no further tools are needed; the cycle repeats for however many prompts the user enters." }
+      ]
+    },
+    {
+      "id": "termination",
+      "name": "Session Termination & Response Logging",
+      "accent": "neutral",
+      "summary": "On '!exit', the REPL fetches the final checkpointed state and flushes the complete conversation to disk before the process ends.",
+      "trigger": "User types '!exit' at either the initial or a follow-up prompt.",
+      "nodes": ["end"],
+      "edges": [],
+      "steps": [
+        { "ref": "main.py:88-90 / 96-98", "description": "The REPL detects the '!exit' sentinel and `break`s out of the outer while-loop." },
+        { "ref": "main.py:119", "description": "final_state = graph.get_state(config) retrieves the last checkpointed AgentState for this thread_id." },
+        { "ref": "main.py:35-48", "description": "cleanup_before_quit(final_state) converts state.values['messages'] via langchain_core.messages.messages_to_dict, wraps it with a timestamp, and appends one JSON line to AGENT_RESPONSE_LOGS/response_history.jsonl." },
+        { "ref": "agent_logger.py:1-28", "description": "Cross-cutting: throughout the entire session, every node call has already been emitting logger.debug/info records to GENERAL_LOGS/general_log.log at the configured LOGGING_LEVEL — this is independent of and continues right up to process exit." }
+      ]
+    }
+  ]
+}
+</script>
+
+<script>
+(function () {
+  "use strict";
+  const DATA = JSON.parse(document.getElementById("flow-data").textContent);
+
+  const ACCENT_VAR = {
+    blue: "--blue", aqua: "--aqua", yellow: "--yellow", green: "--green",
+    violet: "--violet", red: "--red", magenta: "--magenta", orange: "--orange",
+    neutral: "--neutral"
+  };
+  const NODE_TYPE_ACCENT = {
+    llm: "blue", control: "aqua", tool_executor: "yellow",
+    worker: "violet", aggregator: "magenta", terminal: "green"
+  };
+
+  // ---- header ----
+  document.getElementById("app-title").textContent = DATA.meta.project;
+  document.getElementById("app-desc").textContent = DATA.meta.description;
+  document.getElementById("entry-point").textContent = DATA.meta.entry_point;
+  document.getElementById("source-file-count").textContent =
+    DATA.meta.source_files.length + " source files documented";
+
+  // ---- node layout (matches graph.py topology) ----
+  const NODE_W = 220, NODE_H = 54;
+  const POS = {
+    start:                 { x: 300, y: 50  },
+    assistant:             { x: 300, y: 170 },
+    check_tool_permission: { x: 300, y: 320 },
+    tools:                 { x: 300, y: 470 },
+    end:                   { x: 650, y: 170 },
+    research_agent_node:   { x: 750, y: 470 },
+    compile_research:      { x: 750, y: 600 }
+  };
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const nodesLayer = document.getElementById("nodes-layer");
+  const edgesLayer = document.getElementById("edges-layer");
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(svgNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // ---- draw nodes ----
+  DATA.graph.nodes.forEach(function (node) {
+    const p = POS[node.id];
+    const accent = NODE_TYPE_ACCENT[node.type] || "neutral";
+    const g = el("g", {
+      class: "node-box" + (node.type === "terminal" ? " terminal" : ""),
+      id: "node-" + node.id,
+      style: "--node-color: var(" + ACCENT_VAR[accent] + ")"
+    });
+    g.appendChild(el("rect", {
+      x: p.x - NODE_W / 2, y: p.y - NODE_H / 2,
+      width: NODE_W, height: NODE_H, rx: 10
+    }));
+    g.appendChild(el("rect", { class: "chip", x: p.x - NODE_W / 2 + 10, y: p.y - 4, width: 8, height: 8, rx: 2 }));
+    const title = el("text", { class: "title", x: p.x - NODE_W / 2 + 26, y: p.y - 2 });
+    title.textContent = node.label;
+    g.appendChild(title);
+    const sub = el("text", { class: "subtitle", x: p.x - NODE_W / 2 + 26, y: p.y + 14 });
+    sub.textContent = node.file;
+    g.appendChild(sub);
+
+    const t = el("title", {});
+    t.textContent = node.description;
+    g.appendChild(t);
+
+    nodesLayer.appendChild(g);
+  });
+
+  // ---- edge path builders ----
+  function pathD(pts) {
+    return pts.map(function (pt, i) { return (i === 0 ? "M" : "L") + pt[0] + "," + pt[1]; }).join(" ");
+  }
+
+  const EDGE_GEOM = {
+    e_start_assistant: { pts: [[300, 77], [300, 143]], labelAt: [312, 112] },
+    e_assistant_check:  { pts: [[300, 197], [300, 293]], labelAt: [312, 248] },
+    e_assistant_end:    { pts: [[410, 170], [540, 170]], labelAt: [475, 158] },
+    e_check_tools:      { pts: [[300, 347], [300, 443]], labelAt: [312, 398] },
+    e_check_rejected:   { pts: [[190, 320], [60, 320], [60, 170], [190, 170]], labelAt: [64, 245] },
+    e_check_fanout:      { pts: [[410, 320], [950, 320], [950, 470], [860, 470]], labelAt: [870, 300] },
+    e_tools_assistant:  { pts: [[190, 470], [110, 470], [110, 170], [190, 170]], labelAt: [114, 320] },
+    e_research_compile: { pts: [[750, 497], [750, 573]], labelAt: [762, 538] },
+    e_compile_assistant:{ pts: [[640, 600], [30, 600], [30, 170], [190, 170]], labelAt: [34, 390] }
+  };
+
+  DATA.graph.edges.forEach(function (edge) {
+    const geom = EDGE_GEOM[edge.id];
+    if (!geom) return;
+    const g = el("g", { class: "edge " + edge.kind, id: "edge-" + edge.id });
+    g.appendChild(el("path", { d: pathD(geom.pts) }));
+    const label = el("text", { x: geom.labelAt[0], y: geom.labelAt[1] });
+    label.textContent = edge.label;
+    g.appendChild(label);
+    const t = el("title", {});
+    t.textContent = edge.description;
+    g.appendChild(t);
+    edgesLayer.appendChild(g);
+  });
+
+  // ---- flow list ----
+  const flowItemsWrap = document.getElementById("flow-items");
+  DATA.flows.forEach(function (flow) {
+    const btn = document.createElement("button");
+    btn.className = "flow-item";
+    btn.id = "flow-item-" + flow.id;
+    btn.dataset.flowId = flow.id;
+    btn.innerHTML =
+      '<span class="dot" style="--accent: var(' + (ACCENT_VAR[flow.accent] || "--neutral") + ')"></span>' +
+      '<span class="name">' + flow.name + "</span>";
+    btn.addEventListener("click", function () { selectFlow(flow.id); });
+    flowItemsWrap.appendChild(btn);
+  });
+  document.getElementById("flow-item-overview").addEventListener("click", function () { selectFlow(null); });
+
+  const diagramWrap = document.getElementById("diagram-wrap");
+  const detailPanel = document.getElementById("detail-panel");
+
+  function selectFlow(flowId) {
+    document.querySelectorAll(".flow-item").forEach(function (b) { b.classList.remove("active"); });
+    document.querySelectorAll(".node-box").forEach(function (n) { n.classList.remove("active"); });
+    document.querySelectorAll(".edge").forEach(function (e) { e.classList.remove("active"); });
+
+    if (!flowId) {
+      diagramWrap.classList.remove("has-selection");
+      diagramWrap.style.removeProperty("--flow-accent");
+      document.getElementById("flow-item-overview").classList.add("active");
+      detailPanel.innerHTML = '<p class="placeholder">Select a flow on the left to highlight its exact path through the graph and see a step-by-step trace with file/line references. The diagram above always reflects the live LangGraph topology defined in <code>graph.py</code>.</p>';
+      return;
+    }
+
+    const flow = DATA.flows.filter(function (f) { return f.id === flowId; })[0];
+    if (!flow) return;
+
+    document.getElementById("flow-item-" + flowId).classList.add("active");
+    diagramWrap.classList.add("has-selection");
+    const accentVarName = ACCENT_VAR[flow.accent] || "--blue";
+    diagramWrap.style.setProperty("--flow-accent", "var(" + accentVarName + ")");
+
+    flow.nodes.forEach(function (nid) {
+      const n = document.getElementById("node-" + nid);
+      if (n) n.classList.add("active");
+    });
+    flow.edges.forEach(function (eid) {
+      const e = document.getElementById("edge-" + eid);
+      if (e) e.classList.add("active");
+    });
+
+    const stepsHtml = flow.steps.map(function (s) {
+      return "<li><span class=\"ref\">" + escapeHtml(s.ref) + "</span>" + escapeHtml(s.description) + "</li>";
+    }).join("");
+
+    detailPanel.style.setProperty("--flow-accent-detail", "var(" + accentVarName + ")");
+    detailPanel.innerHTML =
+      "<h3>" + escapeHtml(flow.name) + "</h3>" +
+      "<p class=\"summary\">" + escapeHtml(flow.summary) + "</p>" +
+      "<p class=\"trigger\"><strong>Trigger:</strong> " + escapeHtml(flow.trigger) + "</p>" +
+      "<ol class=\"steps\">" + stepsHtml + "</ol>";
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // ---- data tables ----
+  function fillTable(bodyId, rows, cols) {
+    const tbody = document.querySelector("#" + bodyId + " tbody");
+    rows.forEach(function (row) {
+      const tr = document.createElement("tr");
+      cols.forEach(function (c) {
+        const td = document.createElement("td");
+        if (c.code) { td.className = "code"; }
+        td.textContent = row[c.key] || "";
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  fillTable("tools-table",
+    DATA.tools.routed.concat(DATA.tools.virtual.map(function (t) {
+      return Object.assign({}, t, { name: t.name + "  (virtual)" });
+    })),
+    [{ key: "name", code: true }, { key: "file", code: true }, { key: "description" }]
+  );
+
+  document.getElementById("state-file").textContent = DATA.state_schema.file;
+  fillTable("state-table", DATA.state_schema.fields,
+    [{ key: "name", code: true }, { key: "type", code: true }, { key: "description" }]
+  );
+
+  fillTable("settings-table", DATA.settings.fields,
+    [{ key: "env_var", code: true }, { key: "description" }]
+  );
+
+  fillTable("logging-table",
+    DATA.logging_targets.map(function (l) {
+      return { name: l.name, file_written: l.file_written, when: l.when };
+    }),
+    [{ key: "name", code: true }, { key: "file_written", code: true }, { key: "when" }]
+  );
+
+  selectFlow(null);
+})();
+</script>
+
+</body>
+</html>
