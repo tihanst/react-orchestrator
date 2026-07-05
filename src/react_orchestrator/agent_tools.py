@@ -227,7 +227,7 @@ def find_file_in_directory(
 
     if '*' in name:
 
-        recursive_call: Callable[[Any,Any, Any], Any] = partial(find_file_in_directory, directory=path, fuzzy=fuzzy)
+        recursive_call: Callable[[Any,Any, Any], Any] = partial(find_file_in_directory.func, directory=path, fuzzy=fuzzy) # IMPORTANT: find_file_in_directory is now a StructuredTool after being wrapped by @tool, so need to access .func attribute
         clean_name = [x for x in name.split('*') if x != '']
         matches = map(recursive_call, clean_name)
         
