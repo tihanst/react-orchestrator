@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     llm_max_tokens: int = Field(default=...)
     ask_tool_permissions: Literal['y', 'n'] = Field(default=...)
     parallel_tool_calls: Literal['y', 'n'] = Field(default=...)
+    use_telemetry: Literal['y', 'n'] = Field(default=...)
 
     search_logs: str
     agent_response_logs: str
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = str(Path(__file__).parent.parent.parent / ".env")
+        extra = 'ignore'
 
 
 settings = Settings()

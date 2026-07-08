@@ -15,10 +15,17 @@ from . import agent_logger
 from .graph import graph
 from .state import AgentState
 from .settings import settings 
+from .telemetry import setup_file_telemetry
+
+
+SETTINGS = settings
+
+if SETTINGS.use_telemetry == 'y':
+    session_id = setup_file_telemetry()
+    print(f"Session ID for telemetry: {session_id}")
 
 logger = logging.getLogger(__name__)
 
-SETTINGS = settings
 
 DEFAULT_SYSTEM_MSG = ("You are a helpful general assistant who will answer the user's " 
         "queries. You have access to tools you can use to answer queries. If the user "
@@ -63,7 +70,7 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
         system_message = SystemMessage(content=system_prompt)
 
     fin_agent_name = agent_name or "agent_"
-    thread_id = f"{fin_agent_name}{datetime.now().strftime("%Y_%m_%D_%H_%M_%S")}"
+    thread_id = f"{fin_agent_name}{datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}"
 
     config: RunnableConfig = {
         "configurable": {
