@@ -21,6 +21,8 @@ The `assistant` node streams the LLM response. If the model emits a tool call, e
 **Research fan-out** — `check_tool_permission → research_agent_node(s) → compile_research → assistant`  
 When the model calls `parallel_internet_research_agent`, `check_tool_permission` detects the virtual tool and uses LangGraph `Send` to dispatch one research sub-agent via `research_agent_node` per query in parallel. Each worker runs its own internet research and synthesizes the results with a dedicated LLM call. `compile_research` joins all branches, packages the results as a single `ToolMessage`, resets the intermediate research state, and hands control back to `assistant`.
 
+For a more detailed, interactive walkthrough of both paths, open `docs/flows.html` in a browser — a standalone visualizer (data sourced from `docs/flows.json`) that illustrates the graph's execution flows step by step.
+
 ### Nodes
 
 | Node | Role |
@@ -66,9 +68,26 @@ Three log targets are written at runtime (paths configured in `.env`):
 
 - **`SEARCH_LOGS`** — JSONL of every search request and response, tagged `single` or `multiple` depending on which tool triggered the search
 - **`AGENT_RESPONSE_LOGS`** — JSONL of full conversation message histories, written on clean exit
-- **`GENERAL_LOGS`** — Standard Python `logging` output for node-level debug/info events
+- **`GENERAL_LOGS`** — Standard Python `logging` output (`general_log.log`) for node-level debug/info events, level set via `LOGGING_LEVEL`
 
 Log paths are excluded from version control via `.gitignore`.
+
+## Telemetry & observability
+
+When `USE_TELEMETRY=y`, `main.py` calls `setup_file_telemetry()` (`telemetry.py`) at startup, which:
+
+- Tags every span for the process run with a shared `session.id` resource attribute (one UUID per run, so multi-turn conversations group back into a single session)
+- Writes spans to two local files under `logs/telemetry/` via OpenTelemetry's `BatchSpanProcessor`, so tracing never blocks the LangGraph event loop:
+  - **`traces.json`** — pretty-printed spans (`ConsoleSpanExporter` default formatting)
+  - **`jsonl_traces.jsonl`** — one JSON span per line, the format the upload step consumes
+
+Traces are captured locally first and pushed to [LangSmith](https://smith.langchain.com/) as a separate, explicit step rather than exported live:
+
+```bash
+uv run python utils/upload_traces.py
+```
+
+This reads `jsonl_traces.jsonl`, remaps trace/span IDs to fresh values (LangSmith permanently rejects re-sent IDs, even after the owning run is deleted), and POSTs the batch to LangSmith's OTLP ingestion endpoint using `LANGSMITH_API_KEY` (and `LANGSMITH_PROJECT`, if set). It tracks how far it has already uploaded in `logs/telemetry/jsonl_traces.uploaded_offset`, so re-running the script only sends new spans — safe to run repeatedly, e.g. after each session.
 
 ## Setup
 
@@ -88,8 +107,8 @@ Create a `.env` file in the project root:
 ```dotenv
 # LLM provider (TogetherAI by default — swap in any LangChain chat model)
 TOGETHER_API_KEY=your_together_key
-LLM_MODEL=meta-llama/Llama-3.3-70B-Instruct-Turbo
-LLM_MAX_TOKENS=8096
+LLM_MODEL=MiniMaxAI/MiniMax-M2.7
+LLM_MAX_TOKENS=8192
 
 # Web search (Tavily by default — swap in any search client)
 WEBSEARCH_API_KEY=your_tavily_key
@@ -109,12 +128,19 @@ GENERAL_LOGS=logs/general_logs
 
 # Python logging level: DEBUG | INFO | WARNING | ERROR | CRITICAL
 LOGGING_LEVEL=WARNING
+
+# Telemetry: set to 'y' to write OTel spans to logs/telemetry/ during the run
+USE_TELEMETRY=y
+
+# Only needed to run utils/upload_traces.py and push local spans to LangSmith
+LANGSMITH_API_KEY=your_langsmith_key
+LANGSMITH_PROJECT=your_langsmith_project
 ```
 
 ## Running
 
 ```bash
-uv run general-agent-orchestrator
+uv run react-orchestrator
 ```
 
 Type `!exit` at the prompt to end the session and flush conversation history to the response log. On first run the agent graph diagram is rendered and saved to `docs/agent_graph.png`.
@@ -128,18 +154,23 @@ Type `!exit` at the prompt to end the session and flush conversation history to 
 ## Project structure
 
 ```
-src/general_agent_orchestrator/
+src/react_orchestrator/
 ├── main.py          # Entry point, REPL loop, session cleanup
 ├── graph.py         # LangGraph graph definition and compilation
 ├── nodes.py         # All node and conditional-edge functions
 ├── agent_tools.py   # Tool definitions and registries
+├── prompts.py       # Central source for system/tool prompt strings
 ├── state.py         # AgentState schema and custom reducers
 ├── settings.py      # Pydantic settings loaded from .env
-└── agent_logger.py  # Logging configuration
+├── agent_logger.py  # Logging configuration
+└── telemetry.py     # OTel setup: writes spans to logs/telemetry/
 
 utils/
-└── draw_correct_flow.py   # Generates docs/agent_graph.png
+├── draw_correct_flow.py   # Generates docs/agent_graph.png
+└── upload_traces.py       # Pushes logs/telemetry/jsonl_traces.jsonl to LangSmith
 
 docs/
-└── agent_graph.png
+├── agent_graph.png  # Rendered LangGraph diagram (see `Running`)
+├── flows.html       # Standalone interactive flow visualizer (see `Architecture`)
+└── flows.json       # Flow data backing flows.html
 ```

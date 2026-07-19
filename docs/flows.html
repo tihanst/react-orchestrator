@@ -407,13 +407,25 @@
       </table>
     </div>
   </section>
+
+  <section class="data-section">
+    <h2>Telemetry &amp; observability</h2>
+    <p class="sub">
+      Enabled by <code id="telemetry-enabled-by"></code>. Captured locally first, then pushed to LangSmith as a
+      separate, explicit step: <code id="telemetry-upload-command"></code>
+    </p>
+    <table id="telemetry-table">
+      <thead><tr><th>Output</th><th>Location</th><th>Description</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
 </main>
 
 <footer class="note">
   Generated from the LangGraph topology in <code>src/react_orchestrator/graph.py</code>, <code>nodes.py</code>,
-  <code>state.py</code>, <code>agent_tools.py</code>, <code>settings.py</code>, <code>agent_logger.py</code> and
-  <code>main.py</code>. Data source: <code>docs/flows.json</code> (embedded inline here for portability; the
-  standalone file mirrors this data exactly).
+  <code>state.py</code>, <code>agent_tools.py</code>, <code>settings.py</code>, <code>agent_logger.py</code>,
+  <code>telemetry.py</code>, <code>main.py</code> and <code>utils/upload_traces.py</code>. Data source:
+  <code>docs/flows.json</code> (embedded inline here for portability; the standalone file mirrors this data exactly).
 </footer>
 
 <script id="flow-data" type="application/json">
@@ -431,7 +443,9 @@
       "src/react_orchestrator/agent_tools.py",
       "src/react_orchestrator/settings.py",
       "src/react_orchestrator/agent_logger.py",
-      "utils/draw_correct_flow.py"
+      "src/react_orchestrator/telemetry.py",
+      "utils/draw_correct_flow.py",
+      "utils/upload_traces.py"
     ]
   },
   "graph": {
@@ -603,47 +617,70 @@
       { "name": "messages", "type": "list[AnyMessage] (MessagesState)", "description": "Full conversation history; standard LangGraph message-append reducer." },
       { "name": "ask_tool_permission", "type": "Literal['y','n']", "description": "Whether check_tool_permission should interrupt for human approval before every tool call." },
       { "name": "parallel_tool_calls", "type": "bool", "description": "Whether the assistant LLM may emit multiple tool calls in one turn. Kept 'n' in practice — incompatible with per-call approval." },
-      { "name": "research_results", "type": "list[str]", "description": "Accumulates one synthesized summary per fan-out branch (add_or_reset reducer, state.py:6-10); reset to [] by compile_research once joined." },
+      { "name": "research_results", "type": "list[str]", "reducer": "add_or_reset (state.py:6-10)", "description": "Accumulates one synthesized summary per fan-out branch; reset to [] by compile_research once joined." },
       { "name": "query", "type": "str", "description": "Per-branch input consumed by a single research_agent_node instance (set via the Send payload)." },
-      { "name": "compiled_results", "type": "list[tuple[int,str]]", "description": "Running, indexed history of every compiled research result across the session (add_by_increment reducer, state.py:12-17)." }
+      { "name": "compiled_results", "type": "list[tuple[int,str]]", "reducer": "add_by_increment (state.py:12-17)", "description": "Running, indexed history of every compiled research result across the session." }
     ]
   },
   "settings": {
     "file": "settings.py",
     "env_file": ".env",
     "fields": [
-      { "env_var": "TOGETHER_API_KEY", "description": "API key for the ChatTogether LLM backend." },
-      { "env_var": "WEBSEARCH_API_KEY", "description": "API key for the Tavily web search client." },
-      { "env_var": "LLM_MODEL", "description": "Model identifier passed to both the assistant and research ChatTogether instances." },
-      { "env_var": "LLM_MAX_TOKENS", "description": "Max output tokens for LLM completions." },
-      { "env_var": "ASK_TOOL_PERMISSIONS", "description": "'y' to interrupt for approval before every tool call, 'n' to auto-approve." },
-      { "env_var": "PARALLEL_TOOL_CALLS", "description": "'y'/'n'. Validated at startup: cannot be 'y' at the same time as ASK_TOOL_PERMISSIONS='y' (settings.py:21-25)." },
-      { "env_var": "SEARCH_LOGS", "description": "Directory for search_logs.log JSONL search request/response records." },
-      { "env_var": "AGENT_RESPONSE_LOGS", "description": "Directory for response_history.jsonl full conversation dumps." },
-      { "env_var": "GENERAL_LOGS", "description": "Directory for general_log.log standard Python logging output." },
-      { "env_var": "LOGGING_LEVEL", "description": "DEBUG | INFO | WARNING | ERROR | CRITICAL — threshold for general_log.log." }
+      { "env_var": "TOGETHER_API_KEY", "field": "together_api_key", "description": "API key for the ChatTogether LLM backend." },
+      { "env_var": "WEBSEARCH_API_KEY", "field": "websearch_api_key", "description": "API key for the Tavily web search client." },
+      { "env_var": "LLM_MODEL", "field": "llm_model", "description": "Model identifier passed to both the assistant and research ChatTogether instances." },
+      { "env_var": "LLM_MAX_TOKENS", "field": "llm_max_tokens", "description": "Max output tokens for LLM completions." },
+      { "env_var": "ASK_TOOL_PERMISSIONS", "field": "ask_tool_permissions", "description": "'y' to interrupt for approval before every tool call, 'n' to auto-approve." },
+      { "env_var": "PARALLEL_TOOL_CALLS", "field": "parallel_tool_calls", "description": "'y'/'n'. Validated at startup: cannot be 'y' at the same time as ASK_TOOL_PERMISSIONS='y' (settings.py:22-26)." },
+      { "env_var": "SEARCH_LOGS", "field": "search_logs", "description": "Directory for search_logs.log JSONL search request/response records." },
+      { "env_var": "AGENT_RESPONSE_LOGS", "field": "agent_response_logs", "description": "Directory for response_history.jsonl full conversation dumps." },
+      { "env_var": "GENERAL_LOGS", "field": "general_logs", "description": "Directory for general_log.log standard Python logging output." },
+      { "env_var": "LOGGING_LEVEL", "field": "logging_level", "description": "DEBUG | INFO | WARNING | ERROR | CRITICAL — threshold for general_log.log." },
+      { "env_var": "USE_TELEMETRY", "field": "use_telemetry", "description": "'y' to call setup_file_telemetry() at import time (main.py:23-25) and write OTel spans to logs/telemetry/; 'n' to skip telemetry entirely." },
+      { "env_var": "LANGSMITH_API_KEY", "field": "n/a — read via os.environ() in utils/upload_traces.py, not a Settings field", "description": "API key used only by the offline upload_traces.py script to authenticate against LangSmith's OTLP ingestion endpoint." },
+      { "env_var": "LANGSMITH_PROJECT", "field": "n/a — read via os.environ() in utils/upload_traces.py, not a Settings field", "description": "Optional LangSmith project name, sent as the Langsmith-Project header when uploading traces." }
     ]
   },
   "logging_targets": [
     {
       "name": "search_logs",
       "file_written": "search_logs.log",
-      "written_by": "internet_research (agent_tools.py:63-75); research_agent_node (nodes.py:138-149)",
-      "when": "Every web search call, tagged single_or_multiple = 'single' or 'multiple'. Fan-out writes are guarded by a threading.Lock."
+      "format": "JSONL",
+      "written_by": ["internet_research (agent_tools.py:63-75)", "research_agent_node (nodes.py:138-149)"],
+      "when": "Every web search call, tagged single_or_multiple = 'single' or 'multiple'.",
+      "note": "research_agent_node wraps the write in a threading.Lock since fan-out branches may write concurrently."
     },
     {
       "name": "agent_response_logs",
       "file_written": "response_history.jsonl",
-      "written_by": "cleanup_before_quit (main.py:35-48)",
+      "format": "JSONL",
+      "written_by": ["cleanup_before_quit (main.py:35-48)"],
       "when": "Once, on clean exit ('!exit'). Dumps the full final message history via messages_to_dict."
     },
     {
       "name": "general_logs",
       "file_written": "general_log.log",
-      "written_by": "agent_logger.py:24-28 (logging.basicConfig); logger.debug/info calls throughout nodes.py",
-      "when": "Continuously, at every node entry and on cleanup, at the LOGGING_LEVEL threshold."
+      "format": "Python logging text",
+      "written_by": ["agent_logger.py:24-28 (logging.basicConfig)", "logger.debug/info calls throughout nodes.py"],
+      "when": "Continuously, at every node entry (assistant, check_tool_or_end, check_tool_permission, after_check_tool_permission) and on cleanup, at the LOGGING_LEVEL threshold."
     }
   ],
+  "telemetry": {
+    "file": "telemetry.py",
+    "enabled_by": "USE_TELEMETRY=y (settings.py:15)",
+    "setup_call": "main.py:23-25 — setup_file_telemetry() (telemetry.py:19-58) runs at module import time, before the logger is configured",
+    "outputs": [
+      { "name": "traces.json", "file": "logs/telemetry/traces.json", "description": "Pretty-printed OTel spans via ConsoleSpanExporter (telemetry.py:44), written through a BatchSpanProcessor (telemetry.py:50) so tracing never blocks the LangGraph event loop." },
+      { "name": "jsonl_traces.jsonl", "file": "logs/telemetry/jsonl_traces.jsonl", "description": "One JSON span per line (telemetry.py:40-41,47), the exact format utils/upload_traces.py consumes to push spans to LangSmith." },
+      { "name": "session.id resource attribute", "file": "telemetry.py:31-32", "description": "A fresh UUID minted once per process run and attached as a Resource attribute on every span, so multi-turn conversations group back into one session in LangSmith." },
+      { "name": "jsonl_traces.uploaded_offset", "file": "logs/telemetry/jsonl_traces.uploaded_offset", "description": "Byte offset written by upload_traces.py after each successful export, so re-running the script only sends spans appended since the last upload." }
+    ],
+    "upload": {
+      "script": "utils/upload_traces.py",
+      "command": "uv run python utils/upload_traces.py",
+      "description": "Reads jsonl_traces.jsonl, remaps trace/span IDs to fresh random values (LangSmith permanently rejects a previously-seen ID, even after the owning run is deleted), and POSTs the batch to LangSmith's OTLP endpoint using LANGSMITH_API_KEY / LANGSMITH_PROJECT. Tracks progress in jsonl_traces.uploaded_offset so reruns only send new spans."
+    }
+  },
   "flows": [
     {
       "id": "startup",
@@ -654,11 +691,12 @@
       "nodes": ["start"],
       "edges": [],
       "steps": [
-        { "ref": "main.py:53-56", "description": "If docs/agent_graph.png does not exist, shell out to `uv run python utils/draw_correct_flow.py` to render it via matplotlib." },
+        { "ref": "main.py:23-25", "description": "Module import time, before anything else runs: if SETTINGS.use_telemetry == 'y', setup_file_telemetry() (telemetry.py:19-58) starts writing OTel spans to logs/telemetry/ and prints the generated session_id for this run." },
+        { "ref": "main.py:60-63", "description": "If docs/agent_graph.png does not exist, shell out to `uv run python utils/draw_correct_flow.py` to render it via matplotlib." },
         { "ref": "graph.py:19-42", "description": "Module import time: StateGraph is built with all 5 nodes and edges, then builder.compile(checkpointer=MemorySaver()) produces the importable `graph` object." },
-        { "ref": "main.py:60-63", "description": "Build the initial SystemMessage — either the caller-supplied system_prompt or DEFAULT_SYSTEM_MSG (main.py:23-33), which instructs the model on tool usage conventions." },
-        { "ref": "main.py:65-72", "description": "Generate a thread_id (agent_name + timestamp) and wrap it in a RunnableConfig — this is the checkpointer key that gives the session persistent memory." },
-        { "ref": "main.py:75-79", "description": "Construct the initial AgentState with empty messages and ask_tool_permission / parallel_tool_calls pulled from Settings." }
+        { "ref": "main.py:67-70", "description": "Build the initial SystemMessage — either the caller-supplied system_prompt or DEFAULT_SYSTEM_MSG (main.py:30-40), which instructs the model on tool usage conventions." },
+        { "ref": "main.py:72-79", "description": "Generate a thread_id (agent_name + timestamp) and wrap it in a RunnableConfig — this is the checkpointer key that gives the session persistent memory." },
+        { "ref": "main.py:82-86", "description": "Construct the initial AgentState with empty messages and ask_tool_permission / parallel_tool_calls pulled from Settings." }
       ]
     },
     {
@@ -670,11 +708,11 @@
       "nodes": ["start", "assistant", "end"],
       "edges": ["e_start_assistant", "e_assistant_end"],
       "steps": [
-        { "ref": "main.py:87-99", "description": "REPL reads the prompt, appends a HumanMessage to agent_state[\"messages\"]." },
-        { "ref": "main.py:102-104", "description": "graph.stream(agent_state, config, stream_mode='messages') is called; tokens from the assistant node are printed as they stream." },
+        { "ref": "main.py:93-99", "description": "REPL reads the prompt, appends a HumanMessage to agent_state[\"messages\"]." },
+        { "ref": "main.py:109-111", "description": "graph.stream(agent_state, config, stream_mode='messages') is called; tokens from the assistant node are printed as they stream." },
         { "ref": "nodes.py:37-53", "description": "assistant node streams the ChatTogether completion and reduces the chunks into one AIMessage." },
         { "ref": "nodes.py:57-66", "description": "check_tool_or_end finds no tool_calls on the AIMessage and returns END." },
-        { "ref": "main.py:107-117", "description": "The inner permission-check loop finds state.next is empty (no pending interrupt) and breaks immediately — back to the prompt." }
+        { "ref": "main.py:114-124", "description": "The inner permission-check loop finds state.next is empty (no pending interrupt) and breaks immediately — back to the prompt." }
       ]
     },
     {
@@ -703,8 +741,8 @@
       "edges": ["e_assistant_check", "e_check_tools", "e_tools_assistant"],
       "steps": [
         { "ref": "nodes.py:69-77", "description": "check_tool_permission builds a human-readable prompt (\"Call tool: X with arguments: ...\") and calls interrupt(prompt) — this suspends the graph run entirely; graph.stream() returns with nothing further to yield from this node." },
-        { "ref": "main.py:107-112", "description": "The REPL's inner loop calls graph.get_state(config); since state.next and state.tasks[0].interrupts are set, it reads the interrupt value and prompts the user directly with input(interrupt_value)." },
-        { "ref": "main.py:79", "description": "User types 'y' (or anything starting with 'y')." },
+        { "ref": "main.py:114-119", "description": "The REPL's inner loop calls graph.get_state(config); since state.next and state.tasks[0].interrupts are set, it reads the interrupt value and prompts the user directly with input(interrupt_value)." },
+        { "ref": "main.py:118", "description": "User types 'y' (or anything starting with 'y')." },
         { "ref": "nodes.py:79-86", "description": "Resuming via Command(resume=user_input) re-enters check_tool_permission; tool_decision[0] == 'y' so it returns {} unchanged — approval granted, message state untouched." },
         { "ref": "nodes.py:92-106 / graph.py:35", "description": "after_check_tool_permission routes to tools as in the auto-approved case; ToolNode executes and control returns to assistant." }
       ]
@@ -719,7 +757,7 @@
       "edges": ["e_assistant_check", "e_check_rejected"],
       "steps": [
         { "ref": "nodes.py:77", "description": "interrupt() pauses the graph with the same approval prompt as the approved path." },
-        { "ref": "main.py:110-115", "description": "REPL detects the pending interrupt, prompts the user, and resumes the graph with Command(resume=user_input)." },
+        { "ref": "main.py:116-121", "description": "REPL detects the pending interrupt, prompts the user, and resumes the graph with Command(resume=user_input)." },
         { "ref": "nodes.py:79-83", "description": "tool_decision.strip().lower()[0] != 'y' — check_tool_permission builds a ToolMessage stating \"The user has denied the invocation of the tool {name}\", tagged with the original tool_call_id, and returns it as the new last message." },
         { "ref": "nodes.py:92-98", "description": "after_check_tool_permission sees the last message is a ToolMessage (the denial) and routes straight back to \"assistant\" — the tools node is never reached." },
         { "ref": "nodes.py:37-53", "description": "assistant re-invokes the LLM with the denial ToolMessage in context, and must respond or try a different approach." }
@@ -788,14 +826,31 @@
       "nodes": ["end"],
       "edges": [],
       "steps": [
-        { "ref": "main.py:88-90 / 96-98", "description": "The REPL detects the '!exit' sentinel and `break`s out of the outer while-loop." },
-        { "ref": "main.py:119", "description": "final_state = graph.get_state(config) retrieves the last checkpointed AgentState for this thread_id." },
-        { "ref": "main.py:35-48", "description": "cleanup_before_quit(final_state) converts state.values['messages'] via langchain_core.messages.messages_to_dict, wraps it with a timestamp, and appends one JSON line to AGENT_RESPONSE_LOGS/response_history.jsonl." },
+        { "ref": "main.py:95-97 / 103-105", "description": "The REPL detects the '!exit' sentinel and `break`s out of the outer while-loop." },
+        { "ref": "main.py:126", "description": "final_state = graph.get_state(config) retrieves the last checkpointed AgentState for this thread_id." },
+        { "ref": "main.py:42-55", "description": "cleanup_before_quit(final_state) converts state.values['messages'] via langchain_core.messages.messages_to_dict, wraps it with a timestamp, and appends one JSON line to AGENT_RESPONSE_LOGS/response_history.jsonl." },
         { "ref": "agent_logger.py:1-28", "description": "Cross-cutting: throughout the entire session, every node call has already been emitting logger.debug/info records to GENERAL_LOGS/general_log.log at the configured LOGGING_LEVEL — this is independent of and continues right up to process exit." }
+      ]
+    },
+    {
+      "id": "trace_upload",
+      "name": "Offline Trace Upload to LangSmith",
+      "accent": "orange",
+      "summary": "A separate, manually-run step that pushes locally captured OTel spans to LangSmith after the fact, instead of exporting live during the session.",
+      "trigger": "User runs `uv run python utils/upload_traces.py`, typically after ending a session with '!exit'.",
+      "nodes": [],
+      "edges": [],
+      "steps": [
+        { "ref": "upload_traces.py:42-48,82", "description": "Resumes from the byte offset stored in logs/telemetry/jsonl_traces.uploaded_offset, so previously uploaded spans are never resent." },
+        { "ref": "upload_traces.py:84-95", "description": "Reads LANGSMITH_API_KEY (required — aborts with an error if unset) and LANGSMITH_PROJECT (optional) from the environment, and constructs an OTLPSpanExporter targeting LangSmith's OTLP ingestion endpoint." },
+        { "ref": "upload_traces.py:122-128", "description": "Every trace_id/span_id read from jsonl_traces.jsonl is remapped to a fresh random ID before re-export — LangSmith permanently rejects a previously-seen ID, even after the owning run is deleted." },
+        { "ref": "upload_traces.py:165-173", "description": "Each JSONL line is reconstructed into an OpenTelemetry _Span with its original resource attributes (including session.id) and start/end timestamps, then all spans are exported in one batch." },
+        { "ref": "upload_traces.py:190-199", "description": "On success (or a 409, meaning LangSmith already had some of the spans), the offset file is advanced; on any other failure it is left untouched so a rerun retries the same batch." }
       ]
     }
   ]
 }
+
 </script>
 
 <script>
@@ -1003,6 +1058,15 @@
       return { name: l.name, file_written: l.file_written, when: l.when };
     }),
     [{ key: "name", code: true }, { key: "file_written", code: true }, { key: "when" }]
+  );
+
+  document.getElementById("telemetry-enabled-by").textContent = DATA.telemetry.enabled_by;
+  document.getElementById("telemetry-upload-command").textContent = DATA.telemetry.upload.command;
+  fillTable("telemetry-table",
+    DATA.telemetry.outputs.map(function (o) {
+      return { name: o.name, file: o.file, description: o.description };
+    }),
+    [{ key: "name", code: true }, { key: "file", code: true }, { key: "description" }]
   );
 
   selectFlow(null);

@@ -16,6 +16,7 @@ from .graph import graph
 from .state import AgentState
 from .settings import settings 
 from .telemetry import setup_file_telemetry
+from .prompts import DEFAULT_SYSTEM_MSG
 
 
 SETTINGS = settings
@@ -26,18 +27,6 @@ if SETTINGS.use_telemetry == 'y':
 
 logger = logging.getLogger(__name__)
 
-
-DEFAULT_SYSTEM_MSG = ("You are a helpful general assistant who will answer the user's " 
-        "queries. You have access to tools you can use to answer queries. If the user "
-        "asks you to use websearch or internet search to gather information or research to answer the query, "
-        "utilize the internet_research tool or parallel_internet_research_agent tool (if you need to make " 
-        "multiple simultaneous related but non-overlapping queries) that you have access to, in order to retrieve relevant context. "
-        "Ensure that you query this tool in the way a person would form a normal google search query. "
-        "Do not use short form phrases. Ask a full question that encapsulates the user's intent. " 
-        "If you ever add your own context in addition to that which came from "
-        "the internet research in order to answer, place it at the end of your response and "
-        "indicate it with the tags <my_own>."
-    )
 
 def cleanup_before_quit(state: StateSnapshot):
 
@@ -116,7 +105,8 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
             
             if state.next and state.tasks and state.tasks[0].interrupts:
                 interrupt_value = state.tasks[0].interrupts[0].value
-                user_input = input(interrupt_value)
+                print(interrupt_value, end="", flush=True)
+                user_input = input()
                 for chunk, metadata in graph.stream(Command(resume=user_input), config=config, stream_mode="messages"):
                     if metadata["langgraph_node"] == "assistant" and chunk.content:
                         print(chunk.content, end="", flush=True)

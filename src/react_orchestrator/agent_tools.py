@@ -11,6 +11,7 @@ from pydantic import Field
 from langchain_core.tools import tool # type: ignore
 
 from .settings import settings
+from .prompts import PLAN_TOOL_PROMPT
 
 SETTINGS = settings
 
@@ -423,13 +424,21 @@ def get_full_directory_information(
     return results
 
 
+@tool
+def planning_tool() -> str:
+    """A research planning tool to be called before beginning any research searches or complex multi-step actions."""
+    
+    return PLAN_TOOL_PROMPT
+
+
 # Tool registry
 
 TOOL_NODE_ROUTED_TOOLS = [
+    planning_tool,
     internet_research,
-    change_directory,
+    #change_directory,
     list_directory,
-    get_working_directory,
+    #get_working_directory,
     path_exists,
     list_files_recursive,
     make_directory,
