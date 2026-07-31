@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import random
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from dotenv import load_dotenv
 from opentelemetry.trace import TraceFlags, SpanContext
@@ -23,6 +23,11 @@ jsonl_log_file = Path(__file__).parent.parent / "logs/telemetry/jsonl_traces.jso
 offset_file = jsonl_log_file.parent / "jsonl_traces.uploaded_offset"
 
 LANGSMITH_OTLP_ENDPOINT = "https://api.smith.langchain.com/otel/v1/traces"
+
+# LangSmith's OTLP endpoint hard-rejects any span whose start_time is more
+# than 24h in the past (the whole batch 422s). A margin under 24h absorbs
+# clock drift and the time spent reading/building the batch.
+MAX_SPAN_AGE = timedelta(hours=23)
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -105,6 +110,8 @@ def upload_offline_traces(file_path: Path, offset_path: Path):
     span_id_map: dict[str, int] = {}
 
     spans = []
+    stale_skipped = 0
+    cutoff_ns = int((datetime.now(timezone.utc) - MAX_SPAN_AGE).timestamp() * 1e9)
     end_offset = start_offset
     with open(file_path, "r", encoding="utf-8") as f:
         f.seek(start_offset)
@@ -160,6 +167,13 @@ def upload_offline_traces(file_path: Path, offset_path: Path):
                 if isinstance(end_time_ns, str):
                     end_time_ns = _iso_to_ns(end_time_ns)
 
+                # LangSmith rejects the whole batch if any span is too old
+                # (see MAX_SPAN_AGE); drop those individually instead of
+                # letting one stale line block everything behind it.
+                if isinstance(start_time_ns, int) and start_time_ns < cutoff_ns:
+                    stale_skipped += 1
+                    continue
+
                 # Reconstruct the span object; start_time/end_time aren't
                 # constructor args on _Span, they're set via start()/end()
                 span = _Span(
@@ -177,6 +191,9 @@ def upload_offline_traces(file_path: Path, offset_path: Path):
             except Exception as e:
                 print(f"Skipping malformed trace line due to error: {e}")
                 continue
+
+    if stale_skipped:
+        print(f"Skipped {stale_skipped} span(s) older than {MAX_SPAN_AGE} (LangSmith rejects these); offset still advances past them.")
 
     if not spans:
         print("No new spans to upload.")
