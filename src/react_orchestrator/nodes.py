@@ -101,6 +101,9 @@ def check_tool_permission(state: AgentState):
             f"Call tool:\n{tool_chosen['name']}\nwith arguments: {', '.join([f'{x} = {y} ' for x, y in tool_chosen['args'].items()])}?\n(y/n)\n>"
         )
 
+        while not tool_decision.strip():
+            tool_decision = interrupt("Please enter y or n:\n>")
+
         if tool_decision.strip().lower()[0] != "y":
             # Provides a ToolMessage to messages state that tool use was denied, to be sent back with message history to assistant via after_check_tool_permission conditional edge
             tool_reject_message = ToolMessage(
@@ -121,8 +124,8 @@ def after_check_tool_permission(state: AgentState):
     msg = state["messages"][-1]
 
     if isinstance(msg, ToolMessage):
-        # If last msg is a ToolMessage tool use was rejected and we go back to assistant
-        return "assistant"
+        # If last msg is a ToolMessage tool use was rejected and we go back to the user for clarification (it used to be go back to assistant, but that was inefficient)
+        return END
 
     elif isinstance(msg, AIMessage) and msg.tool_calls[0]["name"] in {
         t.name for t in VIRTUAL_TOOLS_FAN_OUT
