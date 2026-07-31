@@ -86,6 +86,8 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
             if first_q == "!exit":
                 print("\nEnding...\n")
                 break
+            if not first_q:
+                continue
             msgs: list[AnyMessage] = [system_message, HumanMessage(content=first_q)]
             agent_state["messages"] = msgs
             start_flag += 1
@@ -94,6 +96,8 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
             if follow_up_q == "!exit":
                 print("Ending...")
                 break
+            if not follow_up_q:
+                continue
             agent_state["messages"] += [HumanMessage(content=follow_up_q)]
 
         for chunk, metadata in graph.stream(
