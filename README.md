@@ -21,6 +21,8 @@ The `assistant` node streams the LLM response. If the model emits a tool call, e
 **Research fan-out** — `check_tool_permission → research_agent_node(s) → compile_research → assistant`  
 When the model calls `parallel_internet_research_agent`, `check_tool_permission` detects the virtual tool and uses LangGraph `Send` to dispatch one research sub-agent via `research_agent_node` per query in parallel. Each worker runs its own internet research and synthesizes the results with a dedicated LLM call. `compile_research` joins all branches, packages the results as a single `ToolMessage`, resets the intermediate research state, and hands control back to `assistant`.
 
+`compile_research` also sets a `research_report_pending_write` flag. On the following `assistant` turn, rather than its usual streaming pass, the model synthesizes the compiled research into a short summary followed by a full markdown report, separated by a `===REPORT===` delimiter. The full report is written straight to `RESEARCH_REPORTS_DIR` — no extra tool-call round trip — and the large compiled-research `ToolMessage` is replaced in place (same message id, so LangGraph's `add_messages` overwrites it rather than appending a duplicate) with just the short summary. Only that summary persists in the conversation's message history going forward, so a long session doesn't keep re-paying token cost for the full research text on every subsequent turn.
+
 For a more detailed, interactive walkthrough of both paths, open `docs/flows.html` in a browser — a standalone visualizer (data sourced from `docs/flows.json`) that illustrates the graph's execution flows step by step.
 
 ### Nodes
@@ -32,6 +34,8 @@ For a more detailed, interactive walkthrough of both paths, open `docs/flows.htm
 | `tools` | LangGraph `ToolNode`; executes all standard (non-virtual) tools |
 | `research_agent_node` | Parallel worker; runs one search query and synthesizes results |
 | `compile_research` | Joins fan-out branches into a single tool response |
+
+`assistant` also handles the research-report synthesis step described above: when `research_report_pending_write` is set, it produces the summary/report pair and writes the file itself instead of its normal streaming pass.
 
 ## Tools
 
@@ -69,6 +73,7 @@ Three log targets are written at runtime (paths configured in `.env`):
 - **`SEARCH_LOGS`** — JSONL of every search request and response, tagged `single` or `multiple` depending on which tool triggered the search
 - **`AGENT_RESPONSE_LOGS`** — JSONL of full conversation message histories, written on clean exit
 - **`GENERAL_LOGS`** — Standard Python `logging` output (`general_log.log`) for node-level debug/info events, level set via `LOGGING_LEVEL`
+- **`RESEARCH_REPORTS_DIR`** — Full markdown research reports synthesized after a `parallel_internet_research_agent` fan-out; only a short summary of each report is kept in the live conversation history
 
 Log paths are excluded from version control via `.gitignore`.
 
@@ -125,6 +130,9 @@ PARALLEL_TOOL_CALLS=n
 SEARCH_LOGS=logs/search
 AGENT_RESPONSE_LOGS=logs/chat_traces
 GENERAL_LOGS=logs/general_logs
+
+# Where full synthesized research reports are written (see Architecture)
+RESEARCH_REPORTS_DIR=logs/research_reports
 
 # Python logging level: DEBUG | INFO | WARNING | ERROR | CRITICAL
 LOGGING_LEVEL=WARNING
