@@ -77,3 +77,29 @@ PLAN_TOOL_PROMPT = inspect.cleandoc("""\
     plan. Keep it under ~400 words. Do not pad simple tasks with unnecessary 
     steps; a two-step plan is a valid plan.\
 """)
+
+RESEARCH_SUMMARY_INSTRUCTIONS_MSG = inspect.cleandoc("""\
+Write a report that will be saved in markdown format with the retrieved research results.
+The report should be a thorough synthesis of the retrieved research, presented in a logical order 
+with a natural flow.
+
+CRITICAL FORMATTING INSTRUCTIONS:
+Your output MUST strictly adhere to the following two-part format:
+
+1. SUMMARY PARAGRAPH
+-You are to always begin the report with a single concise summary paragraph of a few sentences 
+that captures the essence of the key findings of the entire report, and which would serve as 
+an excellent summary for an LLM to understand the contents and main findings of the research report. 
+-Do NOT include any introductory greetings, meta-text, markdown headers (e.g., # Summary), or bullet 
+points in or before this summary paragraph.
+
+2. DELIMITER & REPORT
+-Immediately following the summary paragraph, on a new line, write the EXACT string delimiter:
+===REPORT===
+-Immediately after the delimiter on a new line, begin the full, detailed research report.
+
+OUTPUT FORMAT TEMPLATE:
+<Summary paragraph capturing key findings here.>
+===REPORT===
+<Full written report here.>
+""")

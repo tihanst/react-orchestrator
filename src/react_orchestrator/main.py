@@ -76,6 +76,7 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
         messages=[],
         ask_tool_permission=SETTINGS.ask_tool_permissions,
         parallel_tool_calls=False if SETTINGS.parallel_tool_calls == "n" else True,
+        research_report_pending_write=False
     )
 
     start_flag = 0

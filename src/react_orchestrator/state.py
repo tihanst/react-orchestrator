@@ -23,6 +23,6 @@ class AgentState(MessagesState):
     research_results: Annotated[list[str], add_or_reset]  # Accumulated across N branches by send then deleted in compilation node.
     query: str # Consumed by each research agent
     compiled_results: Annotated[list[str], add_by_increment]
-    
+    research_report_pending_write: bool
 
     

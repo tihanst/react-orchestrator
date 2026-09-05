@@ -7,8 +7,10 @@ from pathlib import Path
 from datetime import datetime
 import logging
 import threading
+import re
 
 from .state import AgentState
+from .prompts import RESEARCH_SUMMARY_INSTRUCTIONS_MSG
 from .agent_tools import ALL_TOOLS, VIRTUAL_TOOLS_FAN_OUT
 
 from langgraph.types import interrupt, Send
@@ -58,21 +60,27 @@ _search_log_lock = threading.Lock()
 def assistant(state: AgentState, config: RunnableConfig):
     logger.debug("entering assistant")
 
-    accumulator = None
-    ai_message_list = []
-    for chunk in llm.stream(state["messages"], config=config):
-        ai_message_list.append(chunk)
+    if state["research_report_pending_write"] is False:
+        ai_message_list = []
+        for chunk in llm.stream(state["messages"], config=config):
+            ai_message_list.append(chunk)
 
-        if accumulator:
-            accumulator += chunk
-        else:
-            accumulator = chunk
+        ai_message = AIMessage(
+            **reduce(operator.add, ai_message_list).model_dump(exclude={"type"})
+        )
+        print(f"\n\n***This is the AI Message***\n\n{ai_message}\n\n*******")
 
-    ai_message = AIMessage(
-        **reduce(operator.add, ai_message_list).model_dump(exclude={"type"})
-    )
-    print(f"\n\n***This is the AI Message***\n\n{ai_message}")
-    return {"messages": [ai_message]}
+        return {"messages": [ai_message]}
+
+    else:
+        new_summary_tool_msg, new_ai_message = _produce_research_report_and_write(
+            state=state, config=config
+        )
+
+        return {
+            "messages": [new_summary_tool_msg, new_ai_message],
+            "research_report_pending_write": False,
+        }
 
 
 # Conditional edge from assistant
@@ -179,6 +187,7 @@ def research_agent_node(state: AgentState):
                 f.write(json.dumps(final_payload) + "\n")
             except Exception as e:
                 print(f"Problem json serializing with e as:\n{e}")
+                logger.exception(f"Problem json serializing with e as:\n{e}")
 
     content = ""
     for result in enumerate(resp["results"]):
@@ -218,4 +227,91 @@ def compile_research(state: AgentState):
         "messages": [tool_message],
         "compiled_results": [research],
         "research_results": None,  # Reset field via custom reducer
+        "research_report_pending_write": True,
     }
+
+
+def _produce_research_report_and_write(
+    state: AgentState, config: RunnableConfig
+) -> tuple[ToolMessage, AIMessage]:
+    # Put most of this in a helper function
+    # Did research and will write a report, need to:
+    # compile research, write to file,
+    # put summary in tool message and replace last message (a ToolMessage) with shorter summary,
+    # create ai message and return it and also set research_report_pending_write to False
+
+    ai_message_list = []
+
+    research_report_llm = ChatTogether(
+        model=SETTINGS.llm_model,
+        temperature=1.0,
+        top_p=0.95,
+        max_tokens=SETTINGS.llm_max_tokens,
+        extra_body={"top_k": 40},
+    )
+
+    for chunk in research_report_llm.stream(
+        state["messages"] + [HumanMessage(content=RESEARCH_SUMMARY_INSTRUCTIONS_MSG)],
+        config=config,
+    ):
+        ai_message_list.append(chunk)
+
+    report_text = reduce(operator.add, ai_message_list).content
+    print(
+        f"\n\nTHIS IS REPORT TEXT\n\n{report_text}\n\nThis is ai_message_list_len{len(ai_message_list)}"
+    )
+    summary, delimiter, report = report_text.partition("===REPORT===")
+
+    if delimiter:
+        _write_markdown_file_non_tool_call(
+            directory=settings.research_reports_dir,
+            info_to_write=report,
+            file_name="REPORT__.md",
+        )
+
+    else:
+        # Match pattern of first paragraph to get summary
+        pattern = r"^\s*([^\n]+(?:\n(?!\s*\n)[^\n]+)*)"
+        match = re.search(pattern, report_text)
+
+        report = summary
+        summary = match.group(1) if match else "No Summary Available."
+
+        _write_markdown_file_non_tool_call(
+            directory=settings.research_reports_dir,
+            info_to_write=report,
+            file_name="REPORT__.md",
+        )
+
+    old_tool_msg: ToolMessage = state["messages"][-1]
+
+    new_summary_tool_msg = ToolMessage(
+        content=summary,
+        tool_call_id=old_tool_msg.tool_call_id,
+        id=old_tool_msg.id,
+    )
+
+    new_ai_message = AIMessage(content=f"Research Summary is:\n\n{summary}")
+
+    return new_summary_tool_msg, new_ai_message
+
+
+def _write_markdown_file_non_tool_call(
+    directory: str, info_to_write: str, file_name: str
+) -> str | None:
+    """Write markdown content to a timestamped file in the given directory, creating the directory if needed."""
+    path = Path(directory).expanduser().resolve()
+
+    path.mkdir(parents=True, exist_ok=True)
+
+    try:
+        file_name_path = Path(file_name)
+        full_write_path = path / Path(
+            file_name_path.stem
+            + datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+            + file_name_path.suffix
+        )
+        with open(full_write_path, "x") as f:
+            f.write(info_to_write)
+    except FileExistsError:  # Should be impossible but just in case
+        return f"File exists, won't overwrite to that path, try adding a random 2-digit number to {directory} and try again."

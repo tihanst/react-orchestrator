@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     agent_response_logs: str
     general_logs: str
     logging_level: str
+    research_reports_dir: str
 
     @model_validator(mode='after')
     def check_permission_parallel_conflict(self) -> 'Settings':
