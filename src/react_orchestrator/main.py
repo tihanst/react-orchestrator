@@ -59,7 +59,11 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
     print("Starting up...\n")
 
     if not system_prompt:
-        system_message = SystemMessage(content=DEFAULT_SYSTEM_MSG)
+        system_message = SystemMessage(
+            content=DEFAULT_SYSTEM_MSG.format(
+                CURRENT_DATE=datetime.now().strftime("%B %d, %Y")
+            )
+        )
     else:
         system_message = SystemMessage(content=system_prompt)
 
@@ -76,7 +80,7 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
         messages=[],
         ask_tool_permission=SETTINGS.ask_tool_permissions,
         parallel_tool_calls=False if SETTINGS.parallel_tool_calls == "n" else True,
-        research_report_pending_write=False
+        research_report_pending_write=False,
     )
 
     start_flag = 0

@@ -24,3 +24,7 @@ logs/**
 
 # Sundry
 tests/
+
+# Serve
+serving/
+

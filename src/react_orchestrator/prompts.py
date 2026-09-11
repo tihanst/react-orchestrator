@@ -1,5 +1,5 @@
 import inspect
-
+from datetime import datetime
 # DEFAULT_SYSTEM_MSG = ("You are a helpful general assistant who will answer the user's "
 #         "queries. You have access to tools you can use to answer queries. If the user "
 #         "asks you to use websearch or internet search to gather information or research to answer the query, "
@@ -21,7 +21,8 @@ DEFAULT_SYSTEM_MSG = inspect.cleandoc("""\
     or research to answer the query, utilize the internet_research tool or 
     parallel_internet_research_agent tool (if you need to make multiple simultaneous 
     related but non-overlapping queries) that you have access to, in order to 
-    retrieve relevant context. 
+    retrieve relevant context. If the request involves current or forward looking time, 
+    note that the current date that you are to use as a reference basis is {CURRENT_DATE}.
     
     Ensure that you query this tool in the way a person would form a normal google 
     search query. Do not use short form phrases. Ask a full question that 
