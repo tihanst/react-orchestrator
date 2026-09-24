@@ -22,7 +22,13 @@ from langchain_core.messages import (
     messages_to_dict,
 )
 from langchain_core.runnables import RunnableConfig
-from langchain_together import ChatTogether
+
+from langchain_together import (
+    ChatTogether,
+)  # replaced except for in one-shot research_llm
+
+# due to dropping of reasoning traces in thinking LLMs
+from .reasoning_chat_together import ReasoningChatTogether
 from langgraph.graph import END
 
 from tavily import TavilyClient
@@ -33,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 SETTINGS = settings
 
-llm = ChatTogether(
+llm = ReasoningChatTogether(
     model=SETTINGS.llm_model,
     temperature=1.0,
     top_p=0.95,
@@ -101,6 +107,10 @@ def check_tool_permission(state: AgentState):
 
     last_msg = state["messages"][-1]
     assert isinstance(last_msg, AIMessage)
+    print(
+        f"DEBUG tool_calls count={len(last_msg.tool_calls)}: "
+        f"{[(tc['name'], tc['id'], tc['args']) for tc in last_msg.tool_calls]}"
+    )
     tool_chosen = last_msg.tool_calls[
         0
     ]  # Hard-coded assumption is no parallel tool calls possible
@@ -213,13 +223,9 @@ def compile_research(state: AgentState):
 
     ai_msg_tool_emmision = state["messages"][-1]
 
-    try:
-        assert isinstance(ai_msg_tool_emmision, AIMessage), (
-            f"compile_research node fail, last message:\n{ai_msg_tool_emmision}\n>Not an ai message tool call emission"
-        )
-    except Exception as e:
-        raise e
-
+    assert isinstance(ai_msg_tool_emmision, AIMessage), (
+        f"compile_research node fail, last message:\n{ai_msg_tool_emmision}\n>Not an ai message tool call emission"
+    )
     tool_id = ai_msg_tool_emmision.tool_calls[0]["id"]
 
     tool_message = ToolMessage(content=research, tool_call_id=tool_id)
@@ -242,7 +248,7 @@ def _produce_research_report_and_write(
 
     ai_message_list = []
 
-    research_report_llm = ChatTogether(
+    research_report_llm = ReasoningChatTogether(
         model=SETTINGS.llm_model,
         temperature=1.0,
         top_p=0.95,
