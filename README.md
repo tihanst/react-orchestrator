@@ -11,7 +11,7 @@ The architecture is provider-agnostic: the LLM backend (currently TogetherAI) an
 
 ## Architecture
 
-<img src="docs/agent_graph.png" width="50%" alt="Agent graph" />
+<img src="docs/agent_graph_new.png" width="50%" alt="Agent graph" />
 
 The graph has two distinct execution paths:
 
@@ -151,7 +151,7 @@ LANGSMITH_PROJECT=your_langsmith_project
 uv run react-orchestrator
 ```
 
-Type `!exit` at the prompt to end the session and flush conversation history to the response log. On first run the agent graph diagram is rendered and saved to `docs/agent_graph_new.png`.
+Type `!exit` at the prompt to end the session and flush conversation history to the response log. On first run the agent graph diagram is rendered and saved to `docs/agent_graph.png`.
 
 ## Swapping providers
 
