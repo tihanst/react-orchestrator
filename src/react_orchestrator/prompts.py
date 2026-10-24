@@ -39,6 +39,10 @@ DEFAULT_SYSTEM_MSG = inspect.cleandoc("""\
     If you ever add your own context in addition to that which came from the 
     internet research in order to answer, place it at the end of your response 
     and indicate it with the tags <my_own>.
+
+    IMPORTANT: Never execute parallel tool calls, only call one tool at a time. While the 
+    parallel_internet_research_agent tool is under-the-hood a parallel tool, it is a single tool 
+    call, and it is always ok to call this tool when you believe it is needed. 
 """)
 
 PLAN_TOOL_PROMPT = inspect.cleandoc("""\
