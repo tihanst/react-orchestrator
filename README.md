@@ -151,7 +151,7 @@ LANGSMITH_PROJECT=your_langsmith_project
 uv run react-orchestrator
 ```
 
-Type `!exit` at the prompt to end the session and flush conversation history to the response log. On first run the agent graph diagram is rendered and saved to `docs/agent_graph.png`.
+Type `!exit` at the prompt to end the session and flush conversation history to the response log. On first run the agent graph diagram is rendered and saved to `docs/agent_graph_new.png`.
 
 ## Swapping providers
 
