@@ -108,3 +108,22 @@ OUTPUT FORMAT TEMPLATE:
 ===REPORT===
 <Full written report here.>
 """)
+
+SKILLS_PROMPT = inspect.cleandoc("""\
+<skills>
+You have access to skills: folders of expert instructions for specific kinds of tasks.
+Below is only each skill's name and a short description. The full instructions are not
+loaded yet. To read them, call load_skill with the skill's name. The tool returns the
+skill's complete instructions as text.
+
+When to load a skill:
+- Before you start a task that matches a skill's description, call load_skill first,
+  then follow the instructions it returns.
+- More than one skill can apply to a single task. Load each one that does.
+- If no description matches the task, don't load anything. Proceed normally.
+- Load each skill once per conversation. Its instructions stay in context after that.
+
+Available skills:
+{SKILLS_LIST}
+</skills>
+""")

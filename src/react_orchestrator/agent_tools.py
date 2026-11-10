@@ -478,12 +478,27 @@ def planning_tool() -> str:
     return PLAN_TOOL_PROMPT
 
 
+@tool
+def load_skill(
+    skill_name: Annotated[
+        str, Field(description="Exact skill name from the <skills> list")
+    ],
+) -> str:
+    """Load the full instructions for a skill listed in <skills>. Call this before starting a task that matches a skill's description."""
+    skills_path: Path = Path(settings.skills_dir).resolve()
+    skill_file: Path = skills_path / skill_name / "SKILL.md"
+    text = skill_file.read_text(encoding="utf-8")
+    skill = text.split("---", maxsplit=2)[-1]
+    return skill
+
+
 # Tool registry
 
 TOOL_NODE_ROUTED_TOOLS = [
     planning_tool,
     internet_research,
     # change_directory,
+    load_skill,
     list_directory,
     # get_working_directory,
     path_exists,
@@ -501,4 +516,3 @@ TOOL_NODE_ROUTED_TOOLS = [
 VIRTUAL_TOOLS_FAN_OUT = [parallel_internet_research_agent]
 
 ALL_TOOLS = TOOL_NODE_ROUTED_TOOLS + VIRTUAL_TOOLS_FAN_OUT
-

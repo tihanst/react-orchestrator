@@ -20,10 +20,13 @@ from .graph import graph
 from .state import AgentState
 from .settings import settings
 from .telemetry import setup_file_telemetry
-from .prompts import DEFAULT_SYSTEM_MSG
+from .prompts import DEFAULT_SYSTEM_MSG, SKILLS_PROMPT
+from .skills_reader import construct_skill_text
 
 
 SETTINGS = settings
+
+skills_list = construct_skill_text()
 
 
 def cleanup_before_quit(state: StateSnapshot):
@@ -63,6 +66,8 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
             content=DEFAULT_SYSTEM_MSG.format(
                 CURRENT_DATE=datetime.now().strftime("%B %d, %Y")
             )
+            + "/n"
+            + SKILLS_PROMPT.format(SKILLS_LIST=skills_list)
         )
     else:
         system_message = SystemMessage(content=system_prompt)
@@ -135,7 +140,4 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
 
 
 if __name__ == "__main__":
-    print("Starting up...\n")
-
-    ans = main()
-    print(f"Final answer:\n\n{ans}")
+    print(Path(settings.skills_dir).resolve())
