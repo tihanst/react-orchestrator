@@ -66,7 +66,7 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
             content=DEFAULT_SYSTEM_MSG.format(
                 CURRENT_DATE=datetime.now().strftime("%B %d, %Y")
             )
-            + "/n"
+            + "\n"
             + SKILLS_PROMPT.format(SKILLS_LIST=skills_list)
         )
     else:

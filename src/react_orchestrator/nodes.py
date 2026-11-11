@@ -10,7 +10,7 @@ import threading
 import re
 
 from .state import AgentState
-from .prompts import RESEARCH_SUMMARY_INSTRUCTIONS_MSG
+from .prompts import RESEARCH_SYSTEM_MSG, RESEARCH_SUMMARY_INSTRUCTIONS_MSG
 from .agent_tools import ALL_TOOLS, VIRTUAL_TOOLS_FAN_OUT
 
 from langgraph.types import interrupt, Send
@@ -74,7 +74,7 @@ def assistant(state: AgentState, config: RunnableConfig):
         ai_message = AIMessage(
             **reduce(operator.add, ai_message_list).model_dump(exclude={"type"})
         )
-        print(f"\n\n***This is the AI Message***\n\n{ai_message}\n\n*******")
+        logger.debug(f"\n\n***This is the AI Message***\n\n{ai_message}\n\n*******")
 
         return {"messages": [ai_message]}
 
@@ -246,6 +246,43 @@ def _produce_research_report_and_write(
     # put summary in tool message and replace last message (a ToolMessage) with shorter summary,
     # create ai message and return it and also set research_report_pending_write to False
 
+    messages = state["messages"]
+
+    # Pull queries sent via internet search, research, and original user message that requested research agents
+    research_tool_msg = messages[-1]
+    research_call = messages[-2]
+    assert isinstance(research_tool_msg, ToolMessage), (
+        "expected compiled research ToolMessage from fan-out Send last"
+    )
+    assert isinstance(research_call, AIMessage) and research_call.tool_calls, (
+        "expected research tool call"
+    )
+
+    research = research_tool_msg.content
+    queries = research_call.tool_calls[0]["args"]["queries"]
+    latest_user_message = next(
+        m for m in reversed(messages) if isinstance(m, HumanMessage)
+    )
+
+    # build context
+    queries_text = "\n".join(f"- {q}" for q in queries)
+
+    report_messages = [
+        SystemMessage(
+            content=RESEARCH_SYSTEM_MSG.format(
+                CURRENT_DATE=datetime.now().strftime("%B %d, %Y")
+            )
+        ),
+        HumanMessage(
+            content=(
+                f"<latest_user_message>\n{latest_user_message.text}\n</latest_user_message>\n\n"
+                f"<research_queries>\n{queries_text}\n</research_queries>\n\n"
+                f"<research_findings>\n{research}\n</research_findings>\n\n"
+                f"{RESEARCH_SUMMARY_INSTRUCTIONS_MSG}"
+            )
+        ),
+    ]
+
     ai_message_list = []
 
     research_report_llm = ReasoningChatTogether(
@@ -257,13 +294,36 @@ def _produce_research_report_and_write(
     )
 
     for chunk in research_report_llm.stream(
-        state["messages"] + [HumanMessage(content=RESEARCH_SUMMARY_INSTRUCTIONS_MSG)],
+        report_messages,
         config=config,
     ):
         ai_message_list.append(chunk)
 
-    report_text = reduce(operator.add, ai_message_list).content
-    print(
+    result = reduce(operator.add, ai_message_list)
+    report_text = result.content
+
+    # Checks
+    finish_reason = result.response_metadata.get("finish_reason")
+    if not report_text.strip():
+        reasoning_len = len(result.additional_kwargs.get("reasoning_content", "") or "")
+        logger.error(
+            f"Report writing LLM returned empty content (finish_reason={finish_reason}, "
+            f"reasoning_chars={reasoning_len}); not writing report file."
+        )
+        summary = f"Report generation failed with finish_reason={finish_reason}. Research was gathered but no report written."
+        return (
+            ToolMessage(
+                content=summary,
+                tool_call_id=research_tool_msg.tool_call_id,
+                id=research_tool_msg.id,
+            ),
+            AIMessage(content=summary),
+        )
+
+    if finish_reason == "length":
+        logger.warning("Report LLM hit max_tokens; report may be truncated.")
+
+    logger.debug(
         f"\n\nTHIS IS REPORT TEXT\n\n{report_text}\n\nThis is ai_message_list_len{len(ai_message_list)}"
     )
     summary, delimiter, report = report_text.partition("===REPORT===")

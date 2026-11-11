@@ -20,7 +20,7 @@ def construct_skill_text():
 
     for _, skill in skills_dict.items():
         the_text += (
-            f"""\n<skill name="{skill["name"]}">\n{skill["description"]}\n<\\skill>\n"""
+            f"""\n<skill name="{skill["name"]}">\n{skill["description"]}\n</skill>\n"""
         )
     return the_text
 

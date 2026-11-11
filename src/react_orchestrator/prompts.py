@@ -83,8 +83,27 @@ PLAN_TOOL_PROMPT = inspect.cleandoc("""\
     steps; a two-step plan is a valid plan.\
 """)
 
+RESEARCH_SYSTEM_MSG = inspect.cleandoc("""\
+   You are a research report writer. Today's date is {CURRENT_DATE}.
+
+   You will be given a user's research request and research findings gathered by other 
+   agents. Your job is to turn those findings into a single, well-structured markdown report. 
+
+   Rules:
+   - You have no tools. Do not attempt to call tools, search, or gather more information. 
+   - Your reply is the report. The harness saves your reply text directly to a markdown file, so output only the report, 
+   with no preamble or commentary about what you will do. 
+   - Base the report only on the research findings provided. If the findings leave gaps or are uncertain, say so
+   in the report rather than trying to fill them. 
+   - Write the complete report in this one reply.
+ """)
+
 RESEARCH_SUMMARY_INSTRUCTIONS_MSG = inspect.cleandoc("""\
-Write a report that will be saved in markdown format with the retrieved research results.
+You have no tools available for this step. Do not call any tools and do not do 
+further research. Your reply text itself is the report: the harness will save it 
+directly to a markdown file. Write the complete report now using only the research
+results above. 
+
 The report should be a thorough synthesis of the retrieved research, presented in a logical order 
 with a natural flow.
 
@@ -107,6 +126,8 @@ OUTPUT FORMAT TEMPLATE:
 <Summary paragraph capturing key findings here.>
 ===REPORT===
 <Full written report here.>
+
+Begin your reply with the summary paragraph now. Do not call tools.
 """)
 
 SKILLS_PROMPT = inspect.cleandoc("""\
@@ -117,7 +138,14 @@ loaded yet. To read them, call load_skill with the skill's name. The tool return
 skill's complete instructions as text.
 
 When to load a skill:
-- Before you start a task that matches a skill's description, call load_skill first,
+- Load a skill only when the kind of work the user is asking you to do is the kind of
+  work its description names. Judge by the activity requested (for example "tutor me"),
+  not by the subject matter or by words the request happens to share with a skill.
+- Only load skills when a user's request or question deals exactly with the description
+  in SKILL.md of what the skill is meant to do or help with.
+- Respect each description's exclusions (for example "Not for ..."). If the task falls
+  under an exclusion, do not load that skill.
+- Before you start a task that requires a skill to be loaded, call load_skill first,
   then follow the instructions it returns.
 - More than one skill can apply to a single task. Load each one that does.
 - If no description matches the task, don't load anything. Proceed normally.

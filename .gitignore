@@ -19,6 +19,7 @@ logs/**
 !logs/*/.gitkeep
 
 
+
 # Notebooks
 *.ipynb
 
@@ -29,4 +30,6 @@ tests/
 serving/
 
 # Skills
-skills/
+!skills/
+skills/*
+!skills/.gitkeep

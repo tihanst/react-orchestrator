@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from functools import partial
 import json
+import logging
 
 from tavily import TavilyClient
 from pydantic import Field
@@ -14,6 +15,7 @@ from .settings import settings
 from .prompts import PLAN_TOOL_PROMPT
 
 SETTINGS = settings
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -76,7 +78,7 @@ def internet_research(
             f.write(json.dumps(final_payload) + "\n")
 
         except Exception as e:
-            print(f"Problem json serializing with e as:\n{e}")
+            logger.error(f"Problem json serializing with e as:\n{e}")
 
     results_list = [f"From {x['title']}:\n{x['content']}\n" for x in resp["results"]]
 
@@ -484,7 +486,8 @@ def load_skill(
         str, Field(description="Exact skill name from the <skills> list")
     ],
 ) -> str:
-    """Load the full instructions for a skill listed in <skills>. Call this before starting a task that matches a skill's description."""
+    """Load the full instructions for a skill listed in <skills>. Use only when the activity the user requests is the
+    activity a skill's description names. Call this before starting a task that matches a skill's description."""
     skills_path: Path = Path(settings.skills_dir).resolve()
     skill_file: Path = skills_path / skill_name / "SKILL.md"
     text = skill_file.read_text(encoding="utf-8")
