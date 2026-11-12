@@ -21,7 +21,9 @@ The `assistant` node streams the LLM response. If the model emits a tool call, e
 **Research fan-out** — `check_tool_permission → research_agent_node(s) → compile_research → assistant`  
 When the model calls `parallel_internet_research_agent`, `check_tool_permission` detects the virtual tool and uses LangGraph `Send` to dispatch one research sub-agent via `research_agent_node` per query in parallel. Each worker runs its own internet research and synthesizes the results with a dedicated LLM call. `compile_research` joins all branches, packages the results as a single `ToolMessage`, resets the intermediate research state, and hands control back to `assistant`.
 
-`compile_research` also sets a `research_report_pending_write` flag. On the following `assistant` turn, rather than its usual streaming pass, the model synthesizes the compiled research into a short summary followed by a full markdown report, separated by a `===REPORT===` delimiter. The full report is written straight to `RESEARCH_REPORTS_DIR` — no extra tool-call round trip — and the large compiled-research `ToolMessage` is replaced in place (same message id, so LangGraph's `add_messages` overwrites it rather than appending a duplicate) with just the short summary. Only that summary persists in the conversation's message history going forward, so a long session doesn't keep re-paying token cost for the full research text on every subsequent turn.
+`compile_research` also sets a `research_report_pending_write` flag. On the following `assistant` turn, a dedicated report-writing LLM call receives a research system prompt, the latest user request, the dispatched research queries, and the compiled findings. This focused context avoids resending the entire conversation history. The writer has no tools and is instructed to synthesize only the supplied findings into a short summary followed by a full markdown report, separated by a `===REPORT===` delimiter. The full report is written straight to `RESEARCH_REPORTS_DIR` — no extra tool-call round trip — and the large compiled-research `ToolMessage` is replaced in place (same message id, so LangGraph's `add_messages` overwrites it rather than appending a duplicate) with just the short summary. Only that summary persists in the conversation's message history going forward, so a long session doesn't keep re-paying token cost for the full research text on every subsequent turn.
+
+If the report writer returns empty content, no report file is written and a failure message is returned to the conversation. If it reaches its token limit, a warning is logged because the saved report may be truncated. If the delimiter is missing, the full response is saved as the report and its first paragraph is used as the summary.
 
 For a more detailed, interactive walkthrough of both paths, open `docs/flows.html` in a browser — a standalone visualizer (data sourced from `docs/flows.json`) that illustrates the graph's execution flows step by step.
 
@@ -66,9 +68,43 @@ For a more detailed, interactive walkthrough of both paths, open `docs/flows.htm
 | `get_full_directory_information` | Metadata (size, modified time, type) for all entries in a directory |
 | `write_markdown_file` | Write markdown content to a timestamped file |
 
+### Skills
+
+| Tool | Description |
+|------|-------------|
+| `load_skill` | Load the full instructions from a skill's `SKILL.md`, using its exact name from the available skills list |
+
+## Skills
+
+Skills provide reusable instructions for specific activities. Set `SKILLS_DIR` to the directory containing your skill folders; the default configuration example uses `skills/`. Each skill should be a direct child directory whose name matches the `name` in its YAML frontmatter:
+
+```text
+skills/
+└── research-review/
+    └── SKILL.md
+```
+
+A `SKILL.md` must begin with YAML frontmatter containing `name` and `description`, followed by the instructions:
+
+```markdown
+---
+name: research-review
+description: Review a research report for evidence gaps and unsupported claims.
+---
+
+Read the report, identify claims that lack supporting evidence, and explain
+what additional research would resolve each gap.
+```
+
+At CLI startup, `skills_reader.py` discovers `SKILL.md` files under `SKILLS_DIR` and adds their names and descriptions to the default system prompt. The agent is instructed to match skills to the activity requested, respect description exclusions, and call `load_skill` before starting matching work. The tool reads `SKILLS_DIR/<skill-name>/SKILL.md` and returns the instructions after the frontmatter. Those instructions remain in conversation context, so the agent is instructed to load each skill once per conversation.
+
+Use direct child folders as shown above: discovery is recursive, but `load_skill` resolves skills by name directly beneath `SKILLS_DIR`. Restart the CLI after adding or changing skill descriptions. A custom `system_prompt` passed to `main()` replaces the default prompt, including its skills list and loading guidance.
+
+The repository tracks `skills/.gitkeep` to preserve the directory; local skill contents are excluded by `.gitignore`. You can leave the directory empty, but `SKILLS_DIR` must still be configured.
+
 ## Logging
 
-Three log targets are written at runtime (paths configured in `.env`):
+Logs and research reports are written at runtime (paths configured in `.env`):
 
 - **`SEARCH_LOGS`** — JSONL of every search request and response, tagged `single` or `multiple` depending on which tool triggered the search
 - **`AGENT_RESPONSE_LOGS`** — JSONL of full conversation message histories, written on clean exit
@@ -107,7 +143,7 @@ cp .env.example .env   # then fill in your values
 
 ### Environment variables
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env` in the project root and fill in the provider keys and model. Settings are loaded from this file with Pydantic Settings; environment variables can override its values. Both `RESEARCH_REPORTS_DIR` and `SKILLS_DIR` are required settings. Relative paths are resolved from the working directory, so run the CLI from the project root when using the paths below:
 
 ```dotenv
 # LLM provider (TogetherAI by default — swap in any LangChain chat model)
@@ -118,7 +154,7 @@ LLM_MAX_TOKENS=8192
 # Web search (Tavily by default — swap in any search client)
 WEBSEARCH_API_KEY=your_tavily_key
 
-# Tool approval: set to 'y' to prompt before every tool call, 'n' for automatically # approved tool calls.
+# Tool approval: 'y' prompts before every tool call; 'n' approves automatically.
 # PARALLEL_TOOL_CALLS controls whether the LLM may emit multiple tool calls
 # in a single response. Keep this 'n' — it is incompatible with per-call
 # approval prompts and is unnecessary: the parallel_internet_research_agent
@@ -133,6 +169,9 @@ GENERAL_LOGS=logs/general_logs
 
 # Where full synthesized research reports are written (see Architecture)
 RESEARCH_REPORTS_DIR=logs/research_reports
+
+# Skill folders containing SKILL.md files (required even if no skills are installed)
+SKILLS_DIR=skills
 
 # Python logging level: DEBUG | INFO | WARNING | ERROR | CRITICAL
 LOGGING_LEVEL=WARNING
@@ -151,7 +190,29 @@ LANGSMITH_PROJECT=your_langsmith_project
 uv run react-orchestrator
 ```
 
-Type `!exit` at the prompt to end the session and flush conversation history to the response log. On first run the agent graph diagram is rendered and saved to `docs/agent_graph.png`.
+Enter a single-line prompt at `prompt>`, or use the commands below for longer input. Commands work for both the first prompt and follow-up turns.
+
+| Command | Behavior |
+|---------|----------|
+| `!multiline` | Start collecting a prompt across multiple lines, preserving line breaks |
+| `!send` | Submit the collected prompt when entered on its own line in multiline mode |
+| `!cancel` | Discard the draft and return to the prompt when entered on its own line in multiline mode |
+| `!paste` | Read and submit the current macOS clipboard text using `pbpaste` |
+| `!exit` | End the session and flush conversation history to the response log |
+
+`!paste` requires macOS's `pbpaste` command. Multiline input works across platforms. Blank input and cancelled or empty drafts are skipped without invoking the agent. Tool-approval prompts still accept their normal approval responses.
+
+For example:
+
+```text
+prompt>!multiline
+Compare these research questions:
+1. What evidence supports the claim?
+2. What uncertainties remain?
+!send
+```
+
+On first run the agent graph diagram is rendered and saved to `docs/agent_graph.png`.
 
 ## Swapping providers
 
@@ -170,8 +231,16 @@ src/react_orchestrator/
 ├── prompts.py       # Central source for system/tool prompt strings
 ├── state.py         # AgentState schema and custom reducers
 ├── settings.py      # Pydantic settings loaded from .env
+├── skills_reader.py # Discovers SKILL.md frontmatter for the skills list
 ├── agent_logger.py  # Logging configuration
 └── telemetry.py     # OTel setup: writes spans to logs/telemetry/
+
+skills/
+├── .gitkeep         # Keeps the empty directory in version control
+└── <skill-name>/    # Local skill folders (gitignored)
+    └── SKILL.md     # YAML name/description followed by full instructions
+
+.env.example        # Configuration template, including report and skill paths
 
 utils/
 ├── draw_correct_flow.py   # Generates docs/agent_graph.png
