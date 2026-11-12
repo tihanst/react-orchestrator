@@ -29,6 +29,33 @@ SETTINGS = settings
 skills_list = construct_skill_text()
 
 
+def read_chat_prompt() -> str:
+    question = input("\nprompt>").strip()
+    if question == "!multiline":
+        print("Multiline mode: enter !send to submit, !cancel to discard.")
+        lines: list[str] = []
+
+        while True:
+            line = input()
+            if line.strip() == "!send":
+                return "\n".join(lines).strip()
+            if line.strip() == "!cancel":
+                print("Draft discarded.")
+                return ""
+            else:
+                lines.append(line)
+
+    if question == "!paste":
+        return subprocess.run(
+            ["pbpaste"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    return question
+
+
 def cleanup_before_quit(state: StateSnapshot):
     with open(
         Path(SETTINGS.agent_response_logs) / "response_history.jsonl",
@@ -92,7 +119,7 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
 
     while True:
         if start_flag == 0:
-            first_q = input("\nprompt> ").strip()
+            first_q = read_chat_prompt()
             if first_q == "!exit":
                 print("\nEnding...\n")
                 break
@@ -102,7 +129,7 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
             agent_state["messages"] = msgs
             start_flag += 1
         else:
-            follow_up_q = input("\nprompt> ").strip()
+            follow_up_q = read_chat_prompt()
             if follow_up_q == "!exit":
                 print("Ending...")
                 break
