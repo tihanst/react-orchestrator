@@ -16,15 +16,25 @@ log_levels_to_ints = {
 log_level = log_levels_to_ints[settings.logging_level]
 
 
+def ensure_log_dirs() -> None:
+    for dir in (
+        settings.general_logs,
+        settings.search_logs,
+        settings.agent_response_logs,
+        settings.research_reports_dir,
+        settings.skills_dir,
+    ):
+        Path(dir).expanduser().resolve().mkdir(parents=True, exist_ok=True)
+
+
 def configure_logging(level: str | None = None, log_dir: str | None = None) -> None:
+    ensure_log_dirs()
+
     root = logging.getLogger()
     if root.handlers:
         return
 
     path = Path(settings.general_logs).resolve()
-
-    if not path.exists():
-        path.mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(
         filename=path / "general_log.log",

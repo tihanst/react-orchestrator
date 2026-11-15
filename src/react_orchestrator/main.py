@@ -46,12 +46,15 @@ def read_chat_prompt() -> str:
                 lines.append(line)
 
     if question == "!paste":
-        return subprocess.run(
+        pasted_query = subprocess.run(
             ["pbpaste"],
             capture_output=True,
             text=True,
             check=True,
         ).stdout.strip()
+
+        print(f"\nQuery is: \n{pasted_query}\n\n")
+        return pasted_query
 
     return question
 
@@ -62,7 +65,7 @@ def cleanup_before_quit(state: StateSnapshot):
         "a",
         encoding="utf-8",
     ) as f:
-        messages: list[dict[str, str]] = messages_to_dict(
+        messages: list[dict[str, Any]] = messages_to_dict(
             state.values.get("messages", [])
         )
         time = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
@@ -108,62 +111,64 @@ def main(system_prompt: str | None = None, agent_name: str | None = None):
         }
     }
 
-    agent_state = AgentState(
-        messages=[],
-        ask_tool_permission=SETTINGS.ask_tool_permissions,
-        parallel_tool_calls=False if SETTINGS.parallel_tool_calls == "n" else True,
-        research_report_pending_write=False,
-    )
-
     start_flag = 0
+    try:
+        while True:
+            if start_flag == 0:
+                first_q = read_chat_prompt()
+                if first_q == "!exit":
+                    print("\nEnding...\n")
+                    break
+                if not first_q:
+                    continue
+                msgs: list[AnyMessage] = [system_message, HumanMessage(content=first_q)]
+                graph_input = AgentState(
+                    messages=msgs,
+                    ask_tool_permission=SETTINGS.ask_tool_permissions,
+                    parallel_tool_calls=False
+                    if SETTINGS.parallel_tool_calls == "n"
+                    else True,
+                    research_report_pending_write=False,
+                )
+                start_flag += 1
 
-    while True:
-        if start_flag == 0:
-            first_q = read_chat_prompt()
-            if first_q == "!exit":
-                print("\nEnding...\n")
-                break
-            if not first_q:
-                continue
-            msgs: list[AnyMessage] = [system_message, HumanMessage(content=first_q)]
-            agent_state["messages"] = msgs
-            start_flag += 1
-        else:
-            follow_up_q = read_chat_prompt()
-            if follow_up_q == "!exit":
-                print("Ending...")
-                break
-            if not follow_up_q:
-                continue
-            agent_state["messages"] += [HumanMessage(content=follow_up_q)]
-
-        for chunk, metadata in graph.stream(
-            agent_state, config=config, stream_mode="messages"
-        ):
-            if metadata["langgraph_node"] == "assistant" and chunk.content:
-                print(chunk.content, end="", flush=True)
-
-        while (
-            True
-        ):  # Multiple tool permissions possible but parallel tool calls always disabled
-            state = graph.get_state(config=config)
-
-            if state.next and state.tasks and state.tasks[0].interrupts:
-                interrupt_value = state.tasks[0].interrupts[0].value
-                print(interrupt_value, end="", flush=True)
-                user_input = input()
-                for chunk, metadata in graph.stream(
-                    Command(resume=user_input), config=config, stream_mode="messages"
-                ):
-                    if metadata["langgraph_node"] == "assistant" and chunk.content:
-                        print(chunk.content, end="", flush=True)
             else:
-                break  # No further permission interrupts left
+                follow_up_q = read_chat_prompt()
+                if follow_up_q == "!exit":
+                    print("\nEnding...\n")
+                    break
+                if not follow_up_q:
+                    continue
+                graph_input = {"messages": [HumanMessage(content=follow_up_q)]}
 
-    final_state = graph.get_state(config=config)
+            for chunk, metadata in graph.stream(
+                graph_input, config=config, stream_mode="messages"
+            ):
+                if metadata["langgraph_node"] == "assistant" and chunk.content:
+                    print(chunk.content, end="", flush=True)
 
-    logger.info("Cleaning up before quitting.")
-    cleanup_before_quit(final_state)
+            while True:  # Multiple tool permissions possible but parallel tool calls always disabled
+                state = graph.get_state(config=config)
+
+                if state.next and state.tasks and state.tasks[0].interrupts:
+                    interrupt_value = state.tasks[0].interrupts[0].value
+                    print(interrupt_value, end="", flush=True)
+                    user_input = input()
+                    for chunk, metadata in graph.stream(
+                        Command(resume=user_input),
+                        config=config,
+                        stream_mode="messages",
+                    ):
+                        if metadata["langgraph_node"] == "assistant" and chunk.content:
+                            print(chunk.content, end="", flush=True)
+                else:
+                    break  # No further permission interrupts left
+    except (KeyboardInterrupt, EOFError):
+        print("\nEnding...\n")
+    finally:
+        final_state = graph.get_state(config=config)
+        logger.info("Cleaning up before quitting.")
+        cleanup_before_quit(final_state)
 
 
 if __name__ == "__main__":

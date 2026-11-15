@@ -96,7 +96,6 @@ def check_tool_or_end(state: AgentState):
     last_msg = state["messages"][-1]
 
     if not isinstance(last_msg, AIMessage) or not last_msg.tool_calls:
-        print("exiting")
         return END
     else:
         return "check_tool_permission"

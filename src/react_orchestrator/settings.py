@@ -1,7 +1,10 @@
 from typing import Literal
-from pydantic import Field, model_validator
+from pydantic import Field, model_validator, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
+
+# src/react_orchestrator/settings.py -> from the resolved path we have parents[0]=react_orchestrator, [1]=src, [2]=project root
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -20,6 +23,20 @@ class Settings(BaseSettings):
     research_reports_dir: str
     skills_dir: str
 
+    @field_validator(
+        "search_logs",
+        "agent_response_logs",
+        "general_logs",
+        "research_reports_dir",
+        "skills_dir",
+    )
+    @classmethod
+    def anchor_paths_to_root(cls, value: str) -> str:
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        return str(path.resolve())
+
     @model_validator(mode="after")
     def check_permission_parallel_conflict(self) -> "Settings":
         if self.ask_tool_permissions == "y" and self.parallel_tool_calls == "y":
@@ -29,7 +46,7 @@ class Settings(BaseSettings):
         return self
 
     model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).parent.parent.parent / ".env"), extra="ignore"
+        env_file=str(PROJECT_ROOT / ".env"), extra="ignore"
     )
 
 
@@ -37,5 +54,4 @@ settings = Settings()
 
 
 if __name__ == "__main__":
-    s = Settings()
-    print(Path(s.skills_dir).resolve())
+    print(Path(settings.skills_dir).resolve())
